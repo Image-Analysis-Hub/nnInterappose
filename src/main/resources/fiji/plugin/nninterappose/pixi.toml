@@ -1,0 +1,44 @@
+[workspace]
+authors = [
+    "Gaelle Letort <gaelle.letort@pasteur.fr>",
+]
+channels = ["conda-forge"]
+name = "nninteractiveEnv"
+platforms = ["osx-arm64", "win-64", "linux-64", "osx-64"]
+version = "0.0.0"
+
+[tasks]
+test = { cmd = "python interactive.py" }
+
+[dependencies]
+python = ">=3.9,<3.13"
+
+[pypi-dependencies]
+appose = ">=0.10.1, <=0.12"
+nninteractive = "*"
+scikit-image = "*"
+
+# --- Platform-specific PyTorch ---
+# CUDA 12.6 for Linux
+[target.linux.pypi-dependencies]
+torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu126" }
+torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu126" }
+
+# CUDA 12.6 for Windows
+[target.win.pypi-dependencies]
+torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu126" }
+torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu126" }
+
+# CPU-only for macOS (no CUDA support)
+[target.osx-arm64.pypi-dependencies]
+torch = { version = ">=2.10.0, <3", index = "https://download.pytorch.org/whl/cpu" }
+torchvision = { version = ">=0.25.0, <0.26", index = "https://download.pytorch.org/whl/cpu" }
+
+# osx-64 (should be drop in favor of osx-arm64, but we keep it for now for users on older macs)
+[target.osx-64.pypi-dependencies]
+torch = { version = ">=2.2.2, <3", index = "https://download.pytorch.org/whl/cpu" }
+torchvision = { version = ">=0.17.2, <0.18", index = "https://download.pytorch.org/whl/cpu" }
+
+# --- Environments ---
+[environments]
+default = { solve-group="default" }
