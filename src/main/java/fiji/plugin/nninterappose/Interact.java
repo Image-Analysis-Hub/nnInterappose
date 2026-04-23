@@ -42,7 +42,6 @@ import ij.gui.ImageWindow;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
 import ij.measure.Calibration;
-import ij.plugin.ImageCalculator;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.LUT;
@@ -195,11 +194,8 @@ public class Interact implements PlugIn
 		if ( labels == null )
 			prepareResultImage();
 		
-		ImageCalculator ic = new ImageCalculator();
-	
 		try 
 		{
-			//System.out.println(nnservice.toString());
 			final String script = getScript( this.getClass().getResource("run_session.py" ) );
 			final Map< String, Object > inputs = new HashMap<>();
 			final List<List<Integer>> bboxes = new ArrayList<>();
@@ -215,7 +211,7 @@ public class Interact implements PlugIn
 				rm.delete(0);
 
 			}
-			//System.out.println("Positives: "+positives);
+			
 			inputs.put("bboxs", bboxes);
 			inputs.put("positives", positives);
 			
@@ -223,7 +219,7 @@ public class Interact implements PlugIn
 			task.listen( e -> {
 				if (e.message != null) 
 				{ 
-					//this.fijiTask.setStatusMessage(e.message);
+					
 					IJ.log( e.message );
 				}
 			});
@@ -473,16 +469,13 @@ public class Interact implements PlugIn
 			
 			// Start the script, and return to Java immediately.
 			IJ.log( "Starting nnInteractive task..." );
-			final long start = System.currentTimeMillis();
 			 // Listen for events from Python
 			task.listen( e -> {
 				if (e.message != null) 
 				{ 
-					//this.fijiTask.setStatusMessage(e.message);
 					IJ.log( e.message );
 				}
-				//if (e.current > 0) {this.fijiTask.setProgressValue(e.current);}
-				//if (e.maximum > 0) {this.fijiTask.setProgressMaximum(e.maximum);}
+
 			} );
 		    		    
 		    task.start();
