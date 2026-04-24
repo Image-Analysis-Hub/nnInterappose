@@ -11,7 +11,7 @@
 
 	<groupId>fiji.plugin</groupId>
 	<artifactId>nnInter_Appose</artifactId>
-	<version>0.0.0-SNAPSHOT</version>
+	<version>0.0.0</version>
 
 	<name>nnInteractive_Appose</name>
 	<description> Use nnInteractive in Fiji </description>
@@ -65,7 +65,7 @@
 		<connection>scm:git:git://github.com/ImageAnalysisHub/nnInterappose</connection>
 		<developerConnection>
 				scm:git:git@github.com:ImageAnalysisHub/nnInterappose</developerConnection>
-		<tag>nnInter_Appose-0.0.1</tag>
+		<tag>nnInter_Appose-0.0.0</tag>
 		<url>https://github.com/ImageAnalysisHub/nnInterappose</url>
 	</scm>
 
