@@ -1,10 +1,14 @@
 package fiji.plugin.nninterappose;
 
+import java.awt.Color;
 import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.io.BufferedReader;
@@ -21,8 +25,10 @@ import java.util.Map;
 
 import javax.swing.Box;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JList;
 import javax.swing.JProgressBar;
 import javax.swing.WindowConstants;
 
@@ -35,15 +41,21 @@ import org.apposed.appose.Service;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.TaskStatus;
 
+import ij.CompositeImage;
 import ij.IJ;
 import ij.ImagePlus;
+import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.ImageWindow;
+import ij.gui.PointRoi;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
 import ij.measure.Calibration;
+import ij.plugin.ChannelSplitter;
 import ij.plugin.PlugIn;
+import ij.plugin.RGBStackMerge;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageConverter;
 import ij.process.LUT;
 import net.imagej.ImgPlus;
 import net.imglib2.appose.NDArrays;
@@ -62,10 +74,13 @@ public class Interact implements PlugIn
 {
 	private RoiManager rm = null;  // handle ROIs interaction: inputs and results
 	private ImagePlus imp = null; // img on which we are working
-	private ImagePlus labels = null; // Results image
+	private CompositeImage merged = null; // Results image
 	private int nlabels = 0; // current number of labels created
+	private boolean all_for_one = true; // define one object by ROI or all for one
 	
 	private Service nnservice = null; // running python service
+	final String run_script = getScript( this.getClass().getResource("run_session.py" ) );
+	
 	
 	/**
 	 * Create the parameter interface
@@ -90,14 +105,47 @@ public class Interact implements PlugIn
 		{
 			addRoi( true );
 		});
+		btnAddPos.setToolTipText("Add current selection in the image as a positive seed for nnInteractive");
+		
 		JButton btnAddNeg = new JButton( "Add negative ROI (or press '2')" );
 		btnStop.addActionListener( e -> 
 		{
 			addRoi( false );
 		});
+		btnAddNeg.setToolTipText("Add current selection in the image as a negative seed for nnInteractive");
 		
-		// send roi to nn
-		JButton btnSendRoi = new JButton("Process ROIs");
+		// Choose mode: one ROI to create one object or multiple ROIs to refine one object
+		JComboBox<String> mode_choice = new JComboBox<String>();
+        mode_choice.addItem("All ROIs define one object");
+        mode_choice.addItem("One ROI by object");
+        
+        mode_choice.addItemListener(new ItemListener() 
+        {
+            @Override
+            public void itemStateChanged(ItemEvent e) 
+            {
+                if (e.getStateChange() == ItemEvent.SELECTED) 
+                {
+                    String selected = (String) e.getItem();
+                   //System.out.println("Changed to: " + selected);
+                    if (selected.equals("One ROI by object"))
+                    {
+                    	all_for_one = false;
+                    	btnAddNeg.setEnabled(false);
+                    }
+                    else 
+                    {
+                    	all_for_one = true;
+                    	btnAddNeg.setEnabled(true);
+                    }
+                }
+            }
+        });
+        mode_choice.setToolTipText( "Choose which mode of segmentation to use: each ROI defines a new object or all ROIs define more precisely one object" );
+        mode_choice.setBackground( new Color(205, 229, 252) );
+		
+        // send roi to nn
+		JButton btnSendRoi = new JButton("Segment from ROIs");
 		btnSendRoi.addActionListener( e -> 
 		{
 			if ( (nnservice != null) ) 
@@ -106,13 +154,45 @@ public class Interact implements PlugIn
 			}
 			//frame.dispose();
 		});
+		
+		// Choose display mode: Composite image or separated input and labels
+		/**JComboBox<String> display_choice = new JComboBox<String>();
+		display_choice.addItem("Side by side");
+		display_choice.addItem("Composite");
+		        
+		display_choice.addItemListener(new ItemListener() 
+		{
+		            @Override
+		            public void itemStateChanged(ItemEvent e) 
+		            {
+		                if (e.getStateChange() == ItemEvent.SELECTED) 
+		                {
+		                    String selected = (String) e.getItem();
+		                   //System.out.println("Changed to: " + selected);
+		                    if (selected.equals("Composite"))
+		                    {
+		                    	System.out.println("todo");
+		                    }
+		                    else 
+		                    {
+		                    	System.out.println("todo");
+		                    }
+		                }
+		            }
+		        });
+		 //mode_choice.setToolTipText( "Choose which mode of segmentation to use: each ROI defines a new object or all ROIs define more precisely one object" );
+		 //mode_choice.setBackground( new Color(205, 229, 252) );*/
+				
+		
 		frame.setLayout( new GridLayout(3, 3, 10, 10) );
 		
 		frame.add( btnStop );
 		frame.add( Box.createGlue());
+		frame.add( Box.createGlue());
 		frame.add( btnAddPos );
 		frame.add( btnAddNeg );
 		frame.add( Box.createGlue());
+		frame.add( mode_choice );
 		frame.add( btnSendRoi );
 	
 		frame.setLocationRelativeTo(null);
@@ -121,7 +201,7 @@ public class Interact implements PlugIn
 	
 	public void addShortcuts()
 	{
-		 ImageWindow w = imp.getWindow();
+		 ImageWindow w = merged.getWindow();
 		 
 		if (w!=null)
 		{
@@ -161,14 +241,19 @@ public class Interact implements PlugIn
 		}
 	}
 	
+	/**
+	 * Add a ROI to the ROI Manager, naming it positive or negative for nninteractions
+	 * param positive
+	 */
 	public void addRoi( boolean positive )
 	{
-		Roi roi = imp.getRoi();
+		Roi roi = merged.getRoi();
 		if ( roi == null )
 		{
 			IJ.log( "No active ROI to add to Manager" );
 			return;
 		}
+		roi.setPosition( 1, merged.getSlice(), 1 );
 		if ( positive )
 			roi.setName("positive");
 		else
@@ -188,48 +273,141 @@ public class Interact implements PlugIn
 		}
 	}
 	
+	/**
+	 * Get ROIs from ROiManager and send them to the python process to nnInteractive
+	 */
 	public < T extends RealType< T > & NativeType< T > >  void sendRois()
 	{
 		// Check if has been initialised else do it now
-		if ( labels == null )
+		if ( merged == null )
 			prepareResultImage();
-		
-		try 
+
+		// If in mode all_for_one, all ROIs will be deleted, so do it only once. If in mode one by one, do each ROI
+		while ( rm.getCount() > 0 )
 		{
-			final String script = getScript( this.getClass().getResource("run_session.py" ) );
-			final Map< String, Object > inputs = new HashMap<>();
-			final List<List<Integer>> bboxes = new ArrayList<>();
-			final List<Boolean> positives = new ArrayList<>(); 
-			
-			// Get all possible ROIs
-			while ( rm.getCount() > 0 )
-			{
-				Roi roi = rm.getRoi(0);
-				Rectangle rect = roi.getBounds();
-				bboxes.add( Arrays.asList( roi.getZPosition(), rect.y, rect.x, rect.y+rect.height, rect.x+rect.width) );
-				positives.add( !roi.getName().equals("negative") );
-				rm.delete(0);
 
-			}
-			
-			inputs.put("bboxs", bboxes);
-			inputs.put("positives", positives);
-			
-			Task task = nnservice.task(script, inputs);
-			task.listen( e -> {
-				if (e.message != null) 
-				{ 
-					
-					IJ.log( e.message );
+			try 
+			{
+				final Map< String, Object > nninputs = new HashMap<>();  // could keep in memory last set of ROIs so that can reset last segmentation
+				final List<List<Integer>> bboxes = new ArrayList<>();
+				final List<List<Integer>> points = new ArrayList<>(); 
+
+				boolean first = true;
+				// Get all possible ROIs
+				while ( (all_for_one && (rm.getCount() > 0)) || (!all_for_one && first) )
+				{
+					Roi roi = rm.getRoi(0);
+					// Handle different ROI possibilities
+					int type = roi.getType();
+					int z = roi.getZPosition() - 1; // getZPosition doesn't work for points ROI. -1 for starting at 0
+					int positive = roi.getName().equals("negative")?0:1; // Roi is a positive seed 
+					switch (type) 
+					{
+					case Roi.RECTANGLE: 
+						//System.out.println("Rectangle ROI");
+						Rectangle rect = roi.getBounds();
+						bboxes.add( Arrays.asList( z, rect.y, rect.x, rect.y+rect.height, rect.x+rect.width, positive) );
+						break;  
+					case Roi.OVAL:    
+						IJ.log("Oval ROIs not handled");
+						break; 
+					case Roi.POLYGON:    
+						IJ.log("Polygon ROis not handled yet");
+						break;  
+					case Roi.FREEROI:    break;
+					case Roi.TRACED_ROI: break;
+					case Roi.LINE:      
+						IJ.log("Line ROIs not handled yet");
+						break;  
+					case Roi.POLYLINE:  
+						break;
+					case Roi.FREELINE:   
+						IJ.log("FreeLine ROIs not handled yet");
+						break;  
+					case Roi.ANGLE:      
+						IJ.log("Angle ROIs are not handled");
+						break;
+					case Roi.COMPOSITE: 
+						IJ.log("ROI type is not handled");
+						break;
+					case Roi.POINT: 
+						Point[] pts = roi.getContainedPoints();
+						for ( int j=0; j<pts.length; j++ )
+							points.add( Arrays.asList( z, pts[j].y, pts[j].x, positive) );
+						break;  // 10
+					default:
+						IJ.log("Unrecognized ROI");
+						break;
+					}
+					rm.delete(0);
+					first = false;
 				}
-			});
-			task.waitFor();
-			if ( task.status != TaskStatus.COMPLETE )
-				throw new RuntimeException( "Python script failed with error: " + task.error );
+				// Put in inputs to send to appose shared memory
+				nninputs.put("bboxs", bboxes);
+				nninputs.put("points", points);
 
-			boolean as_contour = false;
-			if ( as_contour )
+				// Go launch task of segmentation with the ROIs as seeds
+				Task task = nnservice.task( run_script, nninputs );
+				task.listen( e -> {
+					if (e.message != null) 
+					{ 
+						IJ.log( e.message );
+					}
+				});
+				task.waitFor();
+				if ( task.status != TaskStatus.COMPLETE )
+					throw new RuntimeException( "Python script failed with error: " + task.error );
+				addOutputToLabels( task );	
+			}
+			catch ( Exception e)
 			{
+				IJ.error( "Something went wrong: " + e );
+			}
+		}
+	}
+	
+	/**
+	 * Creates the image where the results will be displayed in.
+	 * Makes a Composite with the raw image
+	 */
+	public void prepareResultImage()
+	{
+		ImagePlus labels = IJ.createImage(
+			    "Labels",               // title
+			    "32-bit black",         // type + fill
+			    imp.getWidth(),        // width
+			    imp.getHeight(),       // height
+			    imp.getNChannels(),
+			    imp.getNSlices(),      // number of slices
+			    imp.getNFrames()
+			);
+		useGlasbeyDarkLUT( labels );
+		
+		// Convert raw input image to 32-bits so that it can be overlaid
+		ImageConverter ic = new ImageConverter(imp);
+		ic.convertToGray32();
+		
+		ImagePlus[] channels = new ImagePlus[7]; // all possible channels
+		channels[0] = imp; 
+		channels[1] = labels;
+
+		// Merge create composite
+		merged = (CompositeImage) RGBStackMerge.mergeChannels(channels, true);
+		merged.show();
+		merged.getProcessor().resetMinAndMax();
+		
+		transferCalibration( imp, merged );
+	}
+	
+	/**
+	 * Get the outputs in the shared memory and add it to the labels image
+	 * param task
+	 */
+	public < T extends RealType< T > & NativeType< T > > void addOutputToLabels( Task task )
+	{
+		boolean as_contour = false; // first version with contour -> Rois
+		if ( as_contour )
+		{
 			task.outputs.get("coordinates");
 			Map<String, Object> rois = (Map<String, Object>) task.outputs.get( "coordinates" );
 			boolean zaxis = imp.getNSlices() > 1; // work in Z axis, else in T axis
@@ -251,49 +429,42 @@ public class Interact implements PlugIn
 				rm.addRoi( result );
 				imp.setRoi( result );
 			}
-			}
-			else
-			{
-				final NDArray maskArr = ( NDArray ) task.outputs.get( "binary_stack" );
-				Img< T > output = new ShmImg<>( maskArr );
-				nlabels ++;
-				LoopBuilder.setImages(output)
-			    .forEachPixel(p -> p.setReal(p.getRealDouble() * nlabels));
-				output =  ImgView.wrap( Views.dropSingletonDimensions(output) );
-				//System.out.println(output.numDimensions());
-				Img<T> imgLabels = ImageJFunctions.wrap( labels );
-				//System.out.println(imgLabels.numDimensions());
-				// Add src into dst (modifies imp in-place!)
-				LoopBuilder.setImages( output, imgLabels )
-				    .forEachPixel((s, d) -> d.setReal(d.getRealDouble() + s.getRealDouble()));
-
-				// Refresh display
-				labels.updateAndDraw();
-				//final ImagePlus new_label = ImageJFunctions.wrap( output, "labels" );
-				//labels = ic.run("Add stack", labels, new_label);
-			}
 		}
-		catch ( Exception e)
+		// versions with binary -> labels
+		else
 		{
-			IJ.error( "" + e );
-		}
-	}
+			final NDArray maskArr = ( NDArray ) task.outputs.get( "binary_stack" );
+			Img< T > output = new ShmImg<>( maskArr );
+			nlabels ++;
+			//System.out.println("Nlabels: "+nlabels);
+			LoopBuilder.setImages(output)
+		    .forEachPixel(p -> p.setReal(p.getRealDouble() * nlabels));
+			output =  ImgView.wrap( Views.dropSingletonDimensions(output) );
+			//System.out.println(output.numDimensions());
+			ImagePlus labels = new ImagePlus("Labels", new ChannelSplitter().getChannel(merged, 2 ));
+			Img<T> imgLabels = ImageJFunctions.wrap( labels );
 	
-	public void prepareResultImage()
-	{
-		labels = IJ.createImage(
-			    "Black",               // title
-			    "32-bit black",         // type + fill
-			    imp.getWidth(),        // width
-			    imp.getHeight(),       // height
-			    imp.getNChannels(),
-			    imp.getNSlices(),      // number of slices
-			    imp.getNFrames()
-			);
-		labels.getProcessor().resetMinAndMax();
-		useGlasbeyDarkLUT( labels );
-		transferCalibration( imp, labels );
-		labels.show();
+			LoopBuilder.setImages( output, imgLabels )
+			    .forEachPixel((s, d) -> d.setReal(d.getRealDouble() + s.getRealDouble()));
+
+			// Refresh display
+			merged.setC(2);
+			//merged.setStack( labels.getStack() ); // change everything, not just the current channel
+			// Replace the processor for each slice
+			int cur_slice = merged.getZ();
+			for (int z = 1; z <= merged.getNSlices(); z++) 
+			{
+			    merged.setZ(z);
+			    merged.setProcessor( labels.getStack().getProcessor(z) );
+			}
+			// Put back to current slice, and reset contrast
+			merged.setZ(cur_slice);
+			merged.setDisplayRange(0, nlabels+1);
+			merged.updateAndDraw();
+			
+			//merged.getProcessor().resetMinAndMax();
+			//labels.updateAndDraw();
+		}
 	}
 	
 	public static final void useGlasbeyDarkLUT( final ImagePlus imp )
@@ -585,6 +756,8 @@ private void hideProgress()
 		// Install/initialize the python env with nnInteractive
 		initialize();
 		
+		// Prepare the image with the results as composite
+		prepareResultImage();
 		// add shortcuts on the image
 		addShortcuts();
 		// interface
