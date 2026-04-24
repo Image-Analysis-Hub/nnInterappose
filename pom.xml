@@ -11,7 +11,7 @@
 
 	<groupId>fiji.plugin</groupId>
 	<artifactId>nnInter_Appose</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.0.3-SNAPSHOT</version>
 
 	<name>nnInteractive_Appose</name>
 	<description> Use nnInteractive in Fiji </description>
