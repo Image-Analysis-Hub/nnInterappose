@@ -68,7 +68,7 @@ def set_image_nn( session, img ):
         shape = shape[1:]
     target_tensor = torch.zeros( shape, dtype=torch.uint8 )
     session.set_target_buffer( target_tensor )
-    return session
+    return session, shape
 
 
 appose_mode = 'task' in globals()
@@ -83,7 +83,8 @@ if appose_mode:
     img = image.ndarray()
 
 task.update( message=f"Set image in nnInteractive" )
-session = set_image_nn( session, img )
+session, imgshape = set_image_nn( session, img )
 
 task.update( message=f"Export nnsession" )
 task.export( nnsession=session )
+task.export( nnimgshape = imgshape )

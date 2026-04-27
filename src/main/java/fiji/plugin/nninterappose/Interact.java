@@ -310,8 +310,10 @@ public class Interact implements PlugIn
 			try 
 			{
 				final Map< String, Object > nninputs = new HashMap<>();  // could keep in memory last set of ROIs so that can reset last segmentation
-				final List<List<Integer>> bboxes = new ArrayList<>();
-				final List<List<Integer>> points = new ArrayList<>(); 
+				final List<List<Integer>> bboxes = new ArrayList<>();   // Type of nnInteraction: bounnding box
+				final List<List<Integer>> points = new ArrayList<>();   // Type of nnInteraction: seeds point
+				final List<List<List<Integer>>> scribbles = new ArrayList<>();  // Type of nnInteraction: scribbles
+				final List<List<Integer>> scrib_prop = new ArrayList<>(); // Thickness of the scribbles drawings, and positive or negative interaction
 
 				boolean first = true;
 				// Get all possible ROIs
@@ -343,7 +345,15 @@ public class Interact implements PlugIn
 					case Roi.POLYLINE:  
 						break;
 					case Roi.FREELINE:   
-						IJ.log("FreeLine ROIs not handled yet");
+						Point[] line_pts = roi.getContainedPoints();
+						int thickness = (int) roi.getStrokeWidth();
+						List<List<Integer>> new_scribble = new ArrayList<>();
+						for ( int j=0; j<line_pts.length; j++ )
+						{
+							new_scribble.add( Arrays.asList( z, line_pts[j].y, line_pts[j].x ) );
+						}
+						scribbles.add( new_scribble );
+						scrib_prop.add( Arrays.asList(thickness, positive) );
 						break;  
 					case Roi.ANGLE:      
 						IJ.log("Angle ROIs are not handled");
@@ -364,8 +374,10 @@ public class Interact implements PlugIn
 					first = false;
 				}
 				// Put in inputs to send to appose shared memory
-				nninputs.put("bboxs", bboxes);
-				nninputs.put("points", points);
+				nninputs.put( "bboxs", bboxes );
+				nninputs.put( "points", points );
+				nninputs.put( "scribbles", scribbles );
+				nninputs.put( "scribbles_properties", scrib_prop );
 
 				// Go launch task of segmentation with the ROIs as seeds
 				Task task = nnservice.task( run_script, nninputs );

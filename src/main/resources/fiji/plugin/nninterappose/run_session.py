@@ -22,6 +22,7 @@
 task.update( message=f"nnInteractive segmentation.." )
 
 from skimage.measure import find_contours
+from skimage.morphology import dilation, disk
 
 def get_contours_from_zstack( binary_stack ):
     """
@@ -74,6 +75,18 @@ def add_points():
             #task.update(f"{pt_coordinates}")
             nnsession.add_point_interaction( pt_coordinates, include_interaction=(point[3]==1) )
 
+def add_scribbles():
+    """ Add scribbles interactions: create a binary image """
+    for scribby, prop in zip( scribbles, scribbles_properties ):
+        scrib_img = np.zeros( nnimgshape, dtype=np.uint8 )
+        z = None
+        for pt in scribby:
+            scrib_img[ pt[0], pt[1], pt[2] ] = 1
+            z = pt[0]
+        if z is not None:
+            scrib_img[z] = dilation( scrib_img[z], disk(prop[0]) )## all points have the same Z in Fiji ROI
+        nnsession.add_scribble_interaction( scrib_img, include_interaction=((prop[1])==1) )
+
 def to_5d(arr):
     """Convert 2D or 3D array to 5D"""
     while arr.ndim < 5:
@@ -83,6 +96,8 @@ def to_5d(arr):
 ## Add all interactions from inputs ROI in globals()
 add_bboxes()
 add_points()
+add_scribbles()
+
 ## run the segmentation with current interactions added
 result = nnsession.target_buffer.clone()
 res = result.detach().cpu().numpy()
