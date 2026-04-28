@@ -38,7 +38,10 @@ package fiji.plugin.nninterappose;
 import java.awt.Color;
 import java.awt.EventQueue;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
@@ -46,6 +49,8 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +68,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JProgressBar;
 import javax.swing.WindowConstants;
 
@@ -78,7 +84,9 @@ import org.apposed.appose.Service.TaskStatus;
 import ij.CompositeImage;
 import ij.IJ;
 import ij.ImagePlus;
+import ij.ImageStack;
 import ij.WindowManager;
+import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
@@ -182,29 +190,93 @@ public class Interact implements PlugIn
 		{
 			sendRois();
 		});
+		
+		JLabel removeLab = new JLabel( "Ctrl+Left click on a segmented object to remove it" );
+		removeLab.setToolTipText( "To remove a wrong segmentation, control+left click on the object" );
 				
-		
-		frame.setLayout( new GridLayout(3, 3, 10, 10) );
-		
+		frame.setLayout( new GridBagLayout() );
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.ipadx = 15;
+		gbc.ipady = 15;
+		gbc.insets = new Insets( 2, 2, 2, 2 ); // space between components
+				
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		gbc.gridwidth = 1;
 		frame.add( btnStop );
-		frame.add( Box.createGlue());
-		frame.add( Box.createGlue());
-		frame.add( btnAddPos );
-		frame.add( btnAddNeg );
-		frame.add( Box.createGlue());
-		frame.add( mode_choice );
-		frame.add( btnSendRoi );
+		gbc.gridx = 1;
+		frame.add( Box.createGlue(), gbc);
+		gbc.gridx = 2;
+		frame.add( Box.createGlue(), gbc);
+		gbc.gridx = 0;
+		gbc.gridy = 1;
+		frame.add( btnAddPos, gbc );
+		gbc.gridx = 1;
+		frame.add( btnAddNeg,gbc );
+		gbc.gridx = 2;
+		frame.add( Box.createGlue(),gbc);
+		gbc.gridy = 2;
+		gbc.gridx = 0;
+		frame.add( mode_choice,gbc );
+		gbc.gridx = 1;
+		frame.add( btnSendRoi,gbc );
+		gbc.gridx = 2;
+		frame.add( Box.createGlue(),gbc);
+		gbc.gridx = 0;
+		gbc.gridy = 3;
+		gbc.gridwidth = 3;          // span 3 columns
+		gbc.fill = GridBagConstraints.HORIZONTAL; // stretch horizontally
+		frame.add( removeLab, gbc);
 	
 		frame.setLocationRelativeTo(null);
+		frame.pack();
 		frame.setVisible(true);
 	}
 	
 	public void addShortcuts()
 	{
-		 ImageWindow w = merged.getWindow();
+		ImageWindow w = merged.getWindow();
 		 
 		if (w!=null)
 		{
+			// Mouse shortcuts: under a click
+			MouseListener ml = new MouseListener() 
+			{
+				
+				@Override
+				public void mouseReleased(MouseEvent e) {}
+				
+				@Override
+				public void mousePressed(MouseEvent e) {}
+				
+				@Override
+				public void mouseExited(MouseEvent e) {}
+				
+				@Override
+				public void mouseEntered(MouseEvent e) {}
+				
+				@Override
+				public void mouseClicked(MouseEvent e) 
+				{
+					// Control + left click
+					if ( e.getButton() == e.BUTTON1 )
+					{
+						if ( e.getModifiersEx() == e.CTRL_DOWN_MASK )
+						{
+							int label = getValueUnderClick( e );
+							removeLabel( label );
+							System.out.println("Removed object "+label);
+						}
+					}
+				//System.out.println(e.getButton());
+				//System.out.println(e.getModifiersEx());
+				
+				//System.out.println(e.);
+					
+				}
+			};
+			
+			// Keyboard shortcuts
 			KeyListener kl =  new KeyListener()
 			{
 						
@@ -241,7 +313,19 @@ public class Interact implements PlugIn
 			};
 			w.addKeyListener( kl );
 			w.getCanvas().addKeyListener( kl );
+			w.addMouseListener( ml );
+			w.getCanvas().addMouseListener(ml);
 		}
+	}
+	
+	public int getValueUnderClick( MouseEvent e )
+	{
+		ImageCanvas canvas = merged.getCanvas();
+        int x = canvas.offScreenX(e.getX());
+        int y = canvas.offScreenY(e.getY());
+		int index = merged.getStackIndex( 2, merged.getSlice(), 1);
+		int label = (int) merged.getStack().getProcessor(index).getValue(x, y);
+		return label;	
 	}
 	
 	/**
@@ -274,6 +358,18 @@ public class Interact implements PlugIn
 			IJ.log( "Close python" );
 			nnservice.close();
 		}
+	}
+	
+	/**
+	 * Remove the given label: replace by 0
+	 * param label
+	 */
+	public void removeLabel( int label )
+	{
+		// Set the labels channel as active channel
+		merged.setC( 2 );
+		IJ.run(merged, "Macro...", "code=v=v-v*(v=="+label+") stack");
+		//imp.updateAndDraw();
 	}
 	
 	/**
