@@ -80,7 +80,7 @@
 	<properties>
 		<package-name>fiji.plugin.nninterappose</package-name>
 		<main-class>fiji.plugin.nninterappose.Main</main-class>
-		<license.licenseName>gpl_v2</license.licenseName>
+		<license.licenseName>BSD-3</license.licenseName>
 		<license.copyrightOwners>DSCB</license.copyrightOwners>
 
 		<!-- Use Java 21. -->

@@ -1,3 +1,4 @@
+
 /*
  */
 package fiji.plugin.nninterappose;
@@ -30,7 +31,6 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
-import javax.swing.JList;
 import javax.swing.JProgressBar;
 import javax.swing.WindowConstants;
 
@@ -46,10 +46,8 @@ import org.apposed.appose.Service.TaskStatus;
 import ij.CompositeImage;
 import ij.IJ;
 import ij.ImagePlus;
-import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.ImageWindow;
-import ij.gui.PointRoi;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
 import ij.measure.Calibration;
