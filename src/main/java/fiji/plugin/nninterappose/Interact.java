@@ -405,23 +405,30 @@ public class Interact implements PlugIn
 	 */
 	public void prepareResultImage()
 	{
+		int nslices = imp.getNSlices();
+		// switch axes in the Composite image, so that it is 3D
+		if ( nslices<= 1)
+		{
+			nslices = imp.getNFrames();
+		}
+	
 		ImagePlus labels = IJ.createImage(
 			    "Labels",               // title
 			    "32-bit black",         // type + fill
 			    imp.getWidth(),        // width
 			    imp.getHeight(),       // height
-			    imp.getNChannels(),
-			    imp.getNSlices(),      // number of slices
-			    imp.getNFrames()
-			);
+			    1,
+			    nslices,      // number of slices
+			    1
+		);
 		useGlasbeyDarkLUT( labels );
 		
 		// Convert raw input image to 32-bits so that it can be overlaid
 		ImageConverter ic = new ImageConverter(imp);
 		ic.convertToGray32();
-		
 		ImagePlus[] channels = new ImagePlus[7]; // all possible channels
 		channels[0] = imp; 
+		channels[0].setDimensions(1, nslices, 1); // ensure it's the correct dimensions
 		channels[1] = labels;
 
 		// Merge create composite
@@ -616,6 +623,15 @@ public class Interact implements PlugIn
 	public static final < T > ImgPlus< T > rawWraps( final ImagePlus imp )
 	{
 
+		// If several channels, use only the current one
+		if ( (imp.getNChannels() > 1)  )
+		{
+			int chan = imp.getC();
+			ImagePlus rawip = new ImagePlus("Raw", new ChannelSplitter().getChannel(imp, chan));
+			ImgPlus imgRaw = (ImgPlus) ImageJFunctions.wrap( rawip );
+			return imgRaw;
+		}
+		// else, wrap it		
 		final ImgPlus< DoubleType > img = ImagePlusAdapter.wrapImgPlus( imp );
 		final ImgPlus raw = img;
 		return raw;
@@ -626,6 +642,7 @@ public class Interact implements PlugIn
 	 */
 	public < T extends RealType< T > & NativeType< T > > void initialize()
 	{
+		
 		final ImgPlus<T> img = rawWraps( imp );
 		final String script = getScript( this.getClass().getResource("init_session.py" ) );
 		/*
@@ -786,20 +803,17 @@ private void hideProgress()
 			return;
 		}
 		
-		if ( (imp.getNSlices() <= 1) && (imp.getNFrames() > 1 ) )
+		if ( (imp.getNSlices() <= 1) && (imp.getNFrames() <= 1) )
 		{
 			IJ.error("nnInteractive only works with 3D stacks");
 			return;
 		}
 		
-		if ( imp.getNSlices() <= 1 )
+		if ( (imp.getNSlices() > 1) && (imp.getNFrames() > 1) )
 		{
-			IJ.error("nnInteractive only works with 3D stacks");
+			IJ.error("nnInteractive cannot process 3D+time stacks. Process it frame by frame");
 			return;
 		}
-		
-		
-		
 		
 		
 		// Install/initialize the python env with nnInteractive
