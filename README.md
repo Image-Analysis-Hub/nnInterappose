@@ -35,15 +35,15 @@ When it is ready, a new image `Composite` will apear, with your image as first c
 You can either do multiple objects at the same time, by doing only one prompt (ROI) by object (choose option `One ROI by object`), or do only one at a time with as many prompts (ROIs) as you want for a finer segmentation (choose option `All ROIs for one object`).
 
 Draw prompts and add them to the RoiManager. 
-See [nnInteractive](https://github.com/MIC-DKFZ/nnInteractive) for what prompts are possible and their usage.
 
-In this Fiji plugin, currently possible options to annotate are:
+See [nnInteractive](https://github.com/MIC-DKFZ/nnInteractive) for what prompts are possible and their usage.
+In this Fiji plugin, currently possible options to annotate are (other ROIs might be added later, you can also file an issue to ask for one to be added):
 * Rectangle ROI -> nnInteractive bounding boxes
 * Point ROI -> nnInteractive point seed
 * Line ROI -> nnInteractive scribble. In the Fiji side, it can be any type of line ROI (single line, segmented line, or freehand line).
 
 ![Possible ROI to use](./imgs/RoiToolbar.png)
-Other ROIs will be added later.
+
 
 If you want the prompt to be a positive interaction (see nnInteractive documentation), press `1` to add the current ROI to the ROIManager as a positive one. 
 For a negative prompt (relevant in `All ROIs for one object` mode), press `2` to add the current selection to the RoiManager as a negative one.
