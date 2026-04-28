@@ -323,17 +323,16 @@ public class Interact implements PlugIn
 						IJ.log("Oval ROIs not handled");
 						break; 
 					case Roi.POLYGON:    
-						IJ.log("Polygon ROis not handled yet");
+						IJ.log("Polygon ROis not handled yet. Fill an issue: https://github.com/Image-Analysis-Hub/nnInterappose/issues/new to ask for it to be added in priority");
 						break;  
-					case Roi.FREEROI:    break;
-					case Roi.TRACED_ROI: break;
-					case Roi.LINE:      
-						IJ.log("Line ROIs not handled yet");
-						break;  
-					case Roi.POLYLINE:  
+					case Roi.FREEROI:    
+						IJ.log("Free ROIs not handled yet. Fill an issue: https://github.com/Image-Analysis-Hub/nnInterappose/issues/new to ask for it to be added in priority");
 						break;
+					case Roi.TRACED_ROI: break;
+					case Roi.LINE:    
+					case Roi.POLYLINE:  
 					case Roi.FREELINE:   
-						Point[] line_pts = roi.getContainedPoints();
+						Point[] line_pts = roi.getContainedPoints();		
 						int thickness = (int) roi.getStrokeWidth();
 						List<List<Integer>> new_scribble = new ArrayList<>();
 						for ( int j=0; j<line_pts.length; j++ )
