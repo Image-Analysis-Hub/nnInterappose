@@ -427,7 +427,15 @@ public class Interact implements PlugIn
 		ImageConverter ic = new ImageConverter(imp);
 		ic.convertToGray32();
 		ImagePlus[] channels = new ImagePlus[7]; // all possible channels
-		channels[0] = imp; 
+		if ( imp.getNChannels() > 1 )
+		{
+			int chan = imp.getC();
+			channels[0] = new ImagePlus("Labels", new ChannelSplitter().getChannel( imp, chan ) );
+		}
+		else
+		{
+			channels[0] = imp;
+		}
 		channels[0].setDimensions(1, nslices, 1); // ensure it's the correct dimensions
 		channels[1] = labels;
 
@@ -627,9 +635,10 @@ public class Interact implements PlugIn
 		if ( (imp.getNChannels() > 1)  )
 		{
 			int chan = imp.getC();
-			ImagePlus rawip = new ImagePlus("Raw", new ChannelSplitter().getChannel(imp, chan));
-			ImgPlus imgRaw = (ImgPlus) ImageJFunctions.wrap( rawip );
-			return imgRaw;
+			ImagePlus rawip = new ImagePlus( "Raw", new ChannelSplitter().getChannel(imp, chan) );
+			final ImgPlus< DoubleType > img = ImagePlusAdapter.wrapImgPlus( rawip );
+			final ImgPlus raw = img;
+			return raw;
 		}
 		// else, wrap it		
 		final ImgPlus< DoubleType > img = ImagePlusAdapter.wrapImgPlus( imp );
