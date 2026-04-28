@@ -119,7 +119,7 @@ public class Interact implements PlugIn
 	 */
 	public void main_gui()
 	{
-		JFrame frame = new JFrame("Appose Environments");
+		JFrame frame = new JFrame("nnInter-Appose");
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setSize(800, 250);
 		
@@ -496,9 +496,6 @@ public class Interact implements PlugIn
 			merged.setZ(cur_slice);
 			merged.setDisplayRange(0, nlabels+1);
 			merged.updateAndDraw();
-			
-			//merged.getProcessor().resetMinAndMax();
-			//labels.updateAndDraw();
 		}
 	}
 	

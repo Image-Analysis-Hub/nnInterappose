@@ -3,6 +3,7 @@ Plugin to use [nnInteractive](https://github.com/MIC-DKFZ/nnInteractive) in Fiji
 nnInteractive allows for semi-automatic segmentation of 3D objects by placing manual prompts (seeds) in or around the object to be segmented.
 Prompts can be positive to indicates the location (or contours) of the object, or negative to constraint the segmentation.
 
+![Overview of the plugin](./imgs/overview.png)
 
 ## Installation
 
