@@ -786,6 +786,22 @@ private void hideProgress()
 			return;
 		}
 		
+		if ( (imp.getNSlices() <= 1) && (imp.getNFrames() > 1 ) )
+		{
+			IJ.error("nnInteractive only works with 3D stacks");
+			return;
+		}
+		
+		if ( imp.getNSlices() <= 1 )
+		{
+			IJ.error("nnInteractive only works with 3D stacks");
+			return;
+		}
+		
+		
+		
+		
+		
 		// Install/initialize the python env with nnInteractive
 		initialize();
 		
