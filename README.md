@@ -19,13 +19,19 @@ Press `Apply changes` and restart Fiji when it's done.
 ## Usage
 
 First open the image to annotate.
-On the current version, the image must be a 3D (Z slices) image with only one channel.
 
+### Image dimensions
+The image must be a 3D (Z slices or T frames) image.
+It does not support 2D image or 3D+time stacks.
+If the image as several channels, only the currently active one will be used.
+
+### Initialization
 Then go into `Plugins>Annotation>nnInteractive`.
 Wait for the plugin to start: it will install if necessary a new python environment, then initialize nnInteractive on your image.
 
 When it is ready, a new image `Composite` will apear, with your image as first chanel, and the resulting segmentations will be added to the second chanel.
 
+### Annotate
 You can either do multiple objects at the same time, by doing only one prompt (ROI) by object (choose option `One ROI by object`), or do only one at a time with as many prompts (ROIs) as you want for a finer segmentation (choose option `All ROIs for one object`).
 
 Draw prompts and add them to the RoiManager.
@@ -35,6 +41,6 @@ Other ROI will be added later.
 If you want the prompt to be a positive interaction (see nnInteractive documentation), press `1` to add the current ROI to the ROIManager as a positive one. 
 For a negative prompt (relevant in `All ROIs for one object` mode), press `2` to add the current selection to the RoiManager as a negative one.
 
-When you have added all the prompts for this iteration, press `Segment from ROIs` and wait for the process to finish.
+When you have added all the prompts for this iteration, click the button `Segment from ROIs`, or press `0` and wait for the process to finish.
 
 The new label(s) will be added in the second chanel of the Composite image.
