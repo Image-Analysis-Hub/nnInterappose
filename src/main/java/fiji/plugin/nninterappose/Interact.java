@@ -122,14 +122,14 @@ public class Interact implements PlugIn
 		
 		// Add positive/negative ROIs
 		JButton btnAddPos = new JButton( "Add positive ROI (or press '1')" );
-		btnStop.addActionListener( e -> 
+		btnAddPos.addActionListener( e -> 
 		{
 			addRoi( true );
 		});
 		btnAddPos.setToolTipText("Add current selection in the image as a positive seed for nnInteractive");
 		
 		JButton btnAddNeg = new JButton( "Add negative ROI (or press '2')" );
-		btnStop.addActionListener( e -> 
+		btnAddNeg.addActionListener( e -> 
 		{
 			addRoi( false );
 		});
@@ -166,43 +166,11 @@ public class Interact implements PlugIn
         mode_choice.setBackground( new Color(205, 229, 252) );
 		
         // send roi to nn
-		JButton btnSendRoi = new JButton("Segment from ROIs");
+		JButton btnSendRoi = new JButton("Segment from ROIs (or press '0')");
 		btnSendRoi.addActionListener( e -> 
 		{
-			if ( (nnservice != null) ) 
-			{
-				sendRois();
-			}
-			//frame.dispose();
+			sendRois();
 		});
-		
-		// Choose display mode: Composite image or separated input and labels
-		/**JComboBox<String> display_choice = new JComboBox<String>();
-		display_choice.addItem("Side by side");
-		display_choice.addItem("Composite");
-		        
-		display_choice.addItemListener(new ItemListener() 
-		{
-		            @Override
-		            public void itemStateChanged(ItemEvent e) 
-		            {
-		                if (e.getStateChange() == ItemEvent.SELECTED) 
-		                {
-		                    String selected = (String) e.getItem();
-		                   //System.out.println("Changed to: " + selected);
-		                    if (selected.equals("Composite"))
-		                    {
-		                    	System.out.println("todo");
-		                    }
-		                    else 
-		                    {
-		                    	System.out.println("todo");
-		                    }
-		                }
-		            }
-		        });
-		 //mode_choice.setToolTipText( "Choose which mode of segmentation to use: each ROI defines a new object or all ROIs define more precisely one object" );
-		 //mode_choice.setBackground( new Color(205, 229, 252) );*/
 				
 		
 		frame.setLayout( new GridLayout(3, 3, 10, 10) );
@@ -234,6 +202,9 @@ public class Interact implements PlugIn
 				{
 					switch (e.getKeyChar() )
 					{
+					case '0':
+						sendRois();
+						break;
 					case '1':
 						//System.out.println("1 pressed");
 						addRoi(true);
@@ -299,6 +270,12 @@ public class Interact implements PlugIn
 	 */
 	public < T extends RealType< T > & NativeType< T > >  void sendRois()
 	{
+		if ( nnservice == null )
+		{
+			IJ.error("No currently active session. Wait for initialization to be done or relaunch the plugin");
+			return;
+		}
+		
 		// Check if has been initialised else do it now
 		if ( merged == null )
 			prepareResultImage();
@@ -430,7 +407,7 @@ public class Interact implements PlugIn
 		if ( imp.getNChannels() > 1 )
 		{
 			int chan = imp.getC();
-			channels[0] = new ImagePlus("Labels", new ChannelSplitter().getChannel( imp, chan ) );
+			channels[0] = new ImagePlus("Channel", new ChannelSplitter().getChannel( imp, chan ) );
 		}
 		else
 		{
