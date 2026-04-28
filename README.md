@@ -14,7 +14,7 @@ Select the nnInter_Appose-* `.jar` file to install only this plugin, or keep all
 Press `Apply changes` and restart Fiji when it's done.
 
 > [!NOTE]
-> You should have a recent version of Fiji, based on Java 21 or more. Download a new version if you're current installation is too old.
+> You should have a recent version of Fiji, based on Java 21 or more. [Download a more recent version](https://imagej.net/software/fiji/downloads) if you're current installation is too old.
 
 ## Usage
 
