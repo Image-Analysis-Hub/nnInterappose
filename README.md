@@ -41,6 +41,7 @@ In this Fiji plugin, currently possible options to annotate are:
 * Rectangle ROI -> nnInteractive bounding boxes
 * Point ROI -> nnInteractive point seed
 * Line ROI -> nnInteractive scribble. In the Fiji side, it can be any type of line ROI (single line, segmented line, or freehand line).
+
 ![Possible ROI to use](./imgs/RoiToolbar.png)
 Other ROIs will be added later.
 
