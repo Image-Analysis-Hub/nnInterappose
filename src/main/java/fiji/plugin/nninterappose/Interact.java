@@ -769,9 +769,13 @@ public class Interact implements PlugIn
 		try
 		{
 			// Import all that depends on numpy for Windows
-			nnservice.init("import os\n"
-					+ "import numpy as np\n"
-					+ "import nnInteractive\nimport skimage");
+			nnservice.init("import numpy as np\n"
+					+ "import torch\n"
+					+ "import os\n"
+					+ "from huggingface_hub import snapshot_download\n"
+					+ "from nnInteractive.inference.inference_session import nnInteractiveInferenceSession\n"
+					+ "from skimage.measure import find_contours\n"
+					+ "from skimage.morphology import dilation, disk");
 			
 			//python.debug( msg -> show_messages( msg ) );
 			
