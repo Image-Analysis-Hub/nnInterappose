@@ -33,6 +33,10 @@
 import numpy as np
 import torch
 import os
+from huggingface_hub import snapshot_download
+from nnInteractive.inference.inference_session import nnInteractiveInferenceSession
+from skimage.measure import find_contours
+from skimage.morphology import dilation, disk
 
 def initialize_nn():
     """ Initialize nn-Interactive and return the nn session """
