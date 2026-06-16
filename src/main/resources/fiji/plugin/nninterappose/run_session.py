@@ -71,10 +71,10 @@ def add_bboxes():
         for bbox in bboxs:
             #task.update( message=f"Adding a bbox" )
             bbox_coordinates = [
-            [bbox[0], bbox[0]+1], [bbox[1], bbox[3]], [bbox[2], bbox[4]]
+            [bbox[0], bbox[1]], [bbox[2], bbox[3]], [bbox[4], bbox[5]]
             ]
             task.update( message=f"positive: {bbox[5]==1}" )
-            nnsession.add_bbox_interaction( bbox_coordinates, include_interaction=(bbox[5]==1) )
+            nnsession.add_bbox_interaction( bbox_coordinates, include_interaction=(bbox[6]==1) )
 
 def add_points():
     """ Add points inupts ROI to the interactions """

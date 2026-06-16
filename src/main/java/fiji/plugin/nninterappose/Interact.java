@@ -62,9 +62,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Vector;
 
 import javax.swing.Box;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -92,8 +94,10 @@ import ij.gui.PolygonRoi;
 import ij.gui.Roi;
 import ij.measure.Calibration;
 import ij.plugin.ChannelSplitter;
+import ij.plugin.Orthogonal_Views;
 import ij.plugin.PlugIn;
 import ij.plugin.RGBStackMerge;
+import ij.plugin.Slicer;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageConverter;
 import ij.process.LUT;
@@ -114,9 +118,13 @@ public class Interact implements PlugIn
 {
 	private RoiManager rm = null;  // handle ROIs interaction: inputs and results
 	private ImagePlus imp = null; // img on which we are working
+	private ImagePlus xzimp = null; // XZ view of imp
+	private ImagePlus yzimp = null; // YZ view of imp
+	
 	private CompositeImage merged = null; // Results image
 	private int nlabels = 0; // current number of labels created
 	private boolean all_for_one = true; // define one object by ROI or all for one
+	private boolean keep_rois = false; // Keep rois in ROIManager after computation
 	
 	private Service nnservice = null; // running python service
 	final String run_script = getScript( this.getClass().getResource("run_session.py" ) );
@@ -132,28 +140,34 @@ public class Interact implements PlugIn
 		frame.setSize(800, 250);
 		
 		// Stop the nnInteractive python task
-		JButton btnStop = new JButton("STOP");
+		JButton btnStop = new JButton("QUIT");
 		btnStop.addActionListener( e -> 
 		{
 			stopService();
 			frame.dispose();
+			xzimp.close();
+			yzimp.close();
 		});
+		
+		JLabel drawmsg = new JLabel( "Draw ROI on the image or XZ or YZ views" );
+		
 		
 		// Add positive/negative ROIs
-		JButton btnAddPos = new JButton( "Add positive ROI (or press '1')" );
-		btnAddPos.addActionListener( e -> 
+		JLabel btnAddPos = new JLabel( "Press '1' to add positive ROI" );
+		/**btnAddPos.addActionListener( e -> 
 		{
-			addRoi( true );
+			addRoi( true, "xy" );
 		});
 		btnAddPos.setToolTipText("Add current selection in the image as a positive seed for nnInteractive");
+		*/
 		
-		JButton btnAddNeg = new JButton( "Add negative ROI (or press '2')" );
-		btnAddNeg.addActionListener( e -> 
+		JLabel btnAddNeg = new JLabel( "Press '2' to add negative ROI" );
+		/**btnAddNeg.addActionListener( e -> 
 		{
-			addRoi( false );
+			addRoi( false, "xy" );
 		});
 		btnAddNeg.setToolTipText("Add current selection in the image as a negative seed for nnInteractive");
-		
+		*/
 		// Choose mode: one ROI to create one object or multiple ROIs to refine one object
 		JComboBox<String> mode_choice = new JComboBox<String>();
         mode_choice.addItem("All ROIs define one object");
@@ -171,19 +185,38 @@ public class Interact implements PlugIn
                     if (selected.equals("One ROI by object"))
                     {
                     	all_for_one = false;
-                    	btnAddNeg.setEnabled(false);
+                    	//btnAddNeg.setEnabled(false);
                     }
                     else 
                     {
                     	all_for_one = true;
-                    	btnAddNeg.setEnabled(true);
+                    	//btnAddNeg.setEnabled(true);
                     }
                 }
             }
         });
         mode_choice.setToolTipText( "Choose which mode of segmentation to use: each ROI defines a new object or all ROIs define more precisely one object" );
         mode_choice.setBackground( new Color(205, 229, 252) );
-		
+        
+        JCheckBox checkRemoveRoi = new JCheckBox( "Remove ROIs after segmentation" );
+        checkRemoveRoi.setToolTipText( "Remove the added ROIs from the ROIManager after computation. Uncheck this to keep the ROIs to rerun again" );
+        checkRemoveRoi.setSelected(true);
+        checkRemoveRoi.addItemListener(new ItemListener() 
+        {
+        	  @Override
+              public void itemStateChanged(ItemEvent e) 
+              {
+                  if (e.getStateChange() == ItemEvent.SELECTED) 
+                  {
+                	  keep_rois = false;
+                  }
+                  else if (e.getStateChange() == ItemEvent.DESELECTED)
+                  {
+                	  keep_rois = true;
+                  }
+              }
+        });
+          
         // send roi to nn
 		JButton btnSendRoi = new JButton("Segment from ROIs (or press '0')");
 		btnSendRoi.addActionListener( e -> 
@@ -210,20 +243,26 @@ public class Interact implements PlugIn
 		frame.add( Box.createGlue(), gbc);
 		gbc.gridx = 0;
 		gbc.gridy = 1;
+		gbc.gridwidth = 3;
+		frame.add( drawmsg, gbc );
+		gbc.gridx = 0;
+		gbc.gridy = 2;
+		gbc.gridwidth = 1;
 		frame.add( btnAddPos, gbc );
 		gbc.gridx = 1;
 		frame.add( btnAddNeg,gbc );
 		gbc.gridx = 2;
 		frame.add( Box.createGlue(),gbc);
-		gbc.gridy = 2;
+		gbc.gridy = 3;
 		gbc.gridx = 0;
 		frame.add( mode_choice,gbc );
 		gbc.gridx = 1;
-		frame.add( btnSendRoi,gbc );
+		frame.add( checkRemoveRoi, gbc);
 		gbc.gridx = 2;
-		frame.add( Box.createGlue(),gbc);
+		frame.add( btnSendRoi,gbc );
+		//frame.add( Box.createGlue(),gbc);
 		gbc.gridx = 0;
-		gbc.gridy = 3;
+		gbc.gridy = 4;
 		gbc.gridwidth = 3;          // span 3 columns
 		gbc.fill = GridBagConstraints.HORIZONTAL; // stretch horizontally
 		frame.add( removeLab, gbc);
@@ -233,9 +272,9 @@ public class Interact implements PlugIn
 		frame.setVisible(true);
 	}
 	
-	public void addShortcuts()
+	public void addShortcuts( ImagePlus ip, String dir )
 	{
-		ImageWindow w = merged.getWindow();
+		ImageWindow w = ip.getWindow();
 		 
 		if (w!=null)
 		{
@@ -290,11 +329,11 @@ public class Interact implements PlugIn
 						break;
 					case '1':
 						//System.out.println("1 pressed");
-						addRoi(true);
+						addRoi(true, dir);
 						break;
 					case '2':
 						//System.out.println("2 pressed");
-						addRoi(false);
+						addRoi(false, dir );
 						break;
 					default:
 						break;
@@ -332,19 +371,41 @@ public class Interact implements PlugIn
 	 * Add a ROI to the ROI Manager, naming it positive or negative for nninteractions
 	 * param positive
 	 */
-	public void addRoi( boolean positive )
+	public void addRoi( boolean positive, String dir )
 	{
-		Roi roi = merged.getRoi();
+		Roi roi = null;
+		int slice = 0;
+	
+		switch( dir )
+		{
+		case "xy":
+			roi = merged.getRoi();
+			slice = merged.getSlice();
+			break;
+		case "xz":
+			roi = xzimp.getRoi();
+			slice = xzimp.getSlice();
+			break;
+		case "yz":
+			roi = yzimp.getRoi();
+			slice = yzimp.getSlice();
+			break;
+		default:
+			break;
+		}
+		
 		if ( roi == null )
 		{
 			IJ.log( "No active ROI to add to Manager" );
 			return;
 		}
-		roi.setPosition( 1, merged.getSlice(), 1 );
+		
+		roi.setPosition( 1, slice, 1 );
+		
 		if ( positive )
-			roi.setName("positive");
+			roi.setName("positive"+"_"+dir);
 		else
-			roi.setName("negative");
+			roi.setName("negative"+"_"+dir);
 		rm.addRoi(roi);
 	}
 	
@@ -387,6 +448,10 @@ public class Interact implements PlugIn
 		if ( merged == null )
 			prepareResultImage();
 
+		Roi[] rois = null;
+		if ( keep_rois ) rois = rm.getRoisAsArray();
+		
+		
 		// If in mode all_for_one, all ROIs will be deleted, so do it only once. If in mode one by one, do each ROI
 		while ( rm.getCount() > 0 )
 		{
@@ -398,7 +463,8 @@ public class Interact implements PlugIn
 				final List<List<Integer>> points = new ArrayList<>();   // Type of nnInteraction: seeds point
 				final List<List<List<Integer>>> scribbles = new ArrayList<>();  // Type of nnInteraction: scribbles
 				final List<List<Integer>> scrib_prop = new ArrayList<>(); // Thickness of the scribbles drawings, and positive or negative interaction
-
+				
+				
 				boolean first = true;
 				// Get all possible ROIs
 				while ( (all_for_one && (rm.getCount() > 0)) || (!all_for_one && first) )
@@ -407,13 +473,21 @@ public class Interact implements PlugIn
 					// Handle different ROI possibilities
 					int type = roi.getType();
 					int z = roi.getZPosition() - 1; // getZPosition doesn't work for points ROI. -1 for starting at 0
-					int positive = roi.getName().equals("negative")?0:1; // Roi is a positive seed 
+					String[] roi_name = roi.getName().split( "_" );
+					//System.out.println(roi_name[1]);
+					int positive = roi_name[0].equals("negative")?0:1; // Roi is a positive seed 
+					int switch_dir= roi_name[1].equals("xy")?0:roi_name[1].equals("xz")?1:2;
 					switch (type) 
 					{
 					case Roi.RECTANGLE: 
 						//System.out.println("Rectangle ROI");
 						Rectangle rect = roi.getBounds();
-						bboxes.add( Arrays.asList( z, rect.y, rect.x, rect.y+rect.height, rect.x+rect.width, positive) );
+						if ( switch_dir == 0)
+							bboxes.add( Arrays.asList( z, z+1, rect.y, rect.y+rect.height, rect.x, rect.x+rect.width, positive) );
+						if ( switch_dir == 1)
+							bboxes.add( Arrays.asList( rect.y, rect.y+rect.height, z, z+1, rect.x, rect.x+rect.width, positive) );
+						if ( switch_dir == 2)
+							bboxes.add( Arrays.asList( rect.x, rect.x+rect.width, rect.y, rect.y+rect.height, z, z+1, positive) );
 						break;  
 					case Roi.OVAL:    
 						IJ.log("Oval ROIs not handled");
@@ -433,7 +507,12 @@ public class Interact implements PlugIn
 						List<List<Integer>> new_scribble = new ArrayList<>();
 						for ( int j=0; j<line_pts.length; j++ )
 						{
-							new_scribble.add( Arrays.asList( z, line_pts[j].y, line_pts[j].x ) );
+							if (switch_dir == 0)
+								new_scribble.add( Arrays.asList( z, line_pts[j].y, line_pts[j].x ) );
+							if (switch_dir == 1)
+								new_scribble.add( Arrays.asList( line_pts[j].y, z, line_pts[j].x ) );
+							if (switch_dir == 2)
+								new_scribble.add( Arrays.asList( line_pts[j].x, line_pts[j].y, z ) );
 						}
 						scribbles.add( new_scribble );
 						scrib_prop.add( Arrays.asList(thickness, positive) );
@@ -447,7 +526,15 @@ public class Interact implements PlugIn
 					case Roi.POINT: 
 						Point[] pts = roi.getContainedPoints();
 						for ( int j=0; j<pts.length; j++ )
-							points.add( Arrays.asList( z, pts[j].y, pts[j].x, positive) );
+						{
+							if ( switch_dir == 0)
+								points.add( Arrays.asList( z, pts[j].y, pts[j].x, positive) );
+							if ( switch_dir == 1)
+								points.add( Arrays.asList( pts[j].y, z, pts[j].x, positive) );
+							if ( switch_dir == 2)
+								points.add( Arrays.asList( pts[j].x, pts[j].y, z, positive) );
+						
+						}
 						break;  // 10
 					default:
 						IJ.log("Unrecognized ROI");
@@ -456,6 +543,7 @@ public class Interact implements PlugIn
 					rm.delete(0);
 					first = false;
 				}
+				
 				// Put in inputs to send to appose shared memory
 				nninputs.put( "bboxs", bboxes );
 				nninputs.put( "points", points );
@@ -480,6 +568,13 @@ public class Interact implements PlugIn
 				IJ.error( "Something went wrong: " + e );
 			}
 		}
+		// Put back the ROIs in the Manager if option to remove is off
+		if ( keep_rois )
+		{
+			for ( Roi roi: rois )
+				rm.addRoi(roi);
+		}
+		
 	}
 	
 	/**
@@ -528,6 +623,19 @@ public class Interact implements PlugIn
 		merged.getProcessor().resetMinAndMax();
 		
 		transferCalibration( imp, merged );
+		
+		Slicer slicer = new Slicer();
+		xzimp = slicer.reslice(imp); 
+		xzimp.setTitle("XZ View");
+		xzimp.resetDisplayRange();
+		xzimp.show();
+		
+		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
+		yzimp = IJ.getImage();
+		yzimp.setTitle("YZ View");
+		yzimp.resetDisplayRange();
+		yzimp.show();
+	
 	}
 	
 	/**
@@ -915,7 +1023,9 @@ private void hideProgress()
 		// Prepare the image with the results as composite
 		prepareResultImage();
 		// add shortcuts on the image
-		addShortcuts();
+		addShortcuts( merged, "xy" );
+		addShortcuts( xzimp, "xz");
+		addShortcuts( yzimp, "yz");
 		// interface
 		main_gui();
 	}
