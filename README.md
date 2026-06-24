@@ -5,6 +5,8 @@ Prompts can be positive to indicates the location (or contours) of the object, o
 
 ![Overview of the plugin](./imgs/overview.png)
 
+Full documentation is here: [https://imagej.net/plugins/nninterappose](https://imagej.net/plugins/nninterappose)
+
 ## Installation
 
 You can install the plugin for the unliste update site `Appose-Playground`:
