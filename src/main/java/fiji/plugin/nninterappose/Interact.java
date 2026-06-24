@@ -120,6 +120,7 @@ public class Interact implements PlugIn
 	private ImagePlus imp = null; // img on which we are working
 	private ImagePlus xzimp = null; // XZ view of imp
 	private ImagePlus yzimp = null; // YZ view of imp
+	private boolean ortho_views = false; // activate/desactivate ortho views
 	
 	private CompositeImage merged = null; // Results image
 	private int nlabels = 0; // current number of labels created
@@ -145,8 +146,11 @@ public class Interact implements PlugIn
 		{
 			stopService();
 			frame.dispose();
-			xzimp.close();
-			yzimp.close();
+			if ( ortho_views )
+			{
+				xzimp.close();
+				yzimp.close();
+			}
 		});
 		
 		JLabel drawmsg = new JLabel( "Draw ROI on the image or XZ or YZ views" );
@@ -216,6 +220,27 @@ public class Interact implements PlugIn
                   }
               }
         });
+        
+        // Open/close the orthogonal views
+        JCheckBox checkOrthoViews = new JCheckBox( "Show orthogonal views" );
+        checkOrthoViews.setToolTipText( "Add XZ and YZ views of the stack to allow annotations in these views too." );
+        checkOrthoViews.setSelected(false);
+        checkOrthoViews.addItemListener(new ItemListener() 
+        {
+        	  @Override
+              public void itemStateChanged(ItemEvent e) 
+              {
+                  if (e.getStateChange() == ItemEvent.SELECTED) 
+                  {
+                	  openOrthoViews();
+                  }
+                  else if (e.getStateChange() == ItemEvent.DESELECTED)
+                  {
+                	 closeOrthoViews();
+                  }
+              }
+        });
+        
           
         // send roi to nn
 		JButton btnSendRoi = new JButton("Segment from ROIs (or press '0')");
@@ -421,6 +446,39 @@ public class Interact implements PlugIn
 		}
 	}
 	
+	/** Open orthogonal views */
+	public void openOrthoViews()
+	{
+		ortho_views = true;
+		Slicer slicer = new Slicer();
+		xzimp = slicer.reslice(imp); 
+		xzimp.setTitle("XZ View");
+		xzimp.resetDisplayRange();
+		xzimp.show();
+		
+		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
+		yzimp = IJ.getImage();
+		yzimp.setTitle("YZ View");
+		yzimp.resetDisplayRange();
+		yzimp.show();
+		
+		// Activates the shortcuts and the two views
+		addShortcuts( xzimp, "xz");
+		addShortcuts( yzimp, "yz");
+	}
+	
+	
+	/** Close orthogonal views if they are opened */
+	public void closeOrthoViews()
+	{
+		if ( ortho_views )
+		{
+			xzimp.close();
+			yzimp.close();
+		}
+		ortho_views = false;
+	}
+	
 	/**
 	 * Remove the given label: replace by 0
 	 * param label
@@ -624,19 +682,9 @@ public class Interact implements PlugIn
 		
 		transferCalibration( imp, merged );
 		
-		Slicer slicer = new Slicer();
-		xzimp = slicer.reslice(imp); 
-		xzimp.setTitle("XZ View");
-		xzimp.resetDisplayRange();
-		xzimp.show();
 		
-		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
-		yzimp = IJ.getImage();
-		yzimp.setTitle("YZ View");
-		yzimp.resetDisplayRange();
-		yzimp.show();
-	
 	}
+	
 	
 	/**
 	 * Get the outputs in the shared memory and add it to the labels image
@@ -1024,8 +1072,6 @@ private void hideProgress()
 		prepareResultImage();
 		// add shortcuts on the image
 		addShortcuts( merged, "xy" );
-		addShortcuts( xzimp, "xz");
-		addShortcuts( yzimp, "yz");
 		// interface
 		main_gui();
 	}
