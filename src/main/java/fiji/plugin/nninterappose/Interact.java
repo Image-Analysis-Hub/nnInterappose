@@ -263,12 +263,13 @@ public class Interact implements PlugIn
 		gbc.gridwidth = 1;
 		frame.add( btnStop );
 		gbc.gridx = 1;
-		frame.add( Box.createGlue(), gbc);
-		gbc.gridx = 2;
-		frame.add( Box.createGlue(), gbc);
+		frame.add(  checkOrthoViews, gbc );
+		//frame.add( Box.createGlue(), gbc);
+		//gbc.gridx = 2;
+		//frame.add( Box.createGlue(), gbc);
 		gbc.gridx = 0;
 		gbc.gridy = 1;
-		gbc.gridwidth = 3;
+		gbc.gridwidth = 2;
 		frame.add( drawmsg, gbc );
 		gbc.gridx = 0;
 		gbc.gridy = 2;
@@ -276,19 +277,21 @@ public class Interact implements PlugIn
 		frame.add( btnAddPos, gbc );
 		gbc.gridx = 1;
 		frame.add( btnAddNeg,gbc );
-		gbc.gridx = 2;
-		frame.add( Box.createGlue(),gbc);
+		//gbc.gridx = 2;
+		//frame.add( Box.createGlue(),gbc);
 		gbc.gridy = 3;
 		gbc.gridx = 0;
 		frame.add( mode_choice,gbc );
 		gbc.gridx = 1;
 		frame.add( checkRemoveRoi, gbc);
-		gbc.gridx = 2;
+		
+		gbc.gridy = 4;
+		gbc.gridx = 1;
 		frame.add( btnSendRoi,gbc );
 		//frame.add( Box.createGlue(),gbc);
 		gbc.gridx = 0;
-		gbc.gridy = 4;
-		gbc.gridwidth = 3;          // span 3 columns
+		gbc.gridy = 5;
+		gbc.gridwidth = 2;          // span 3 columns
 		gbc.fill = GridBagConstraints.HORIZONTAL; // stretch horizontally
 		frame.add( removeLab, gbc);
 	
