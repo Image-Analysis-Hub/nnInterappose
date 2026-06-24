@@ -146,11 +146,13 @@ public class Interact implements PlugIn
 		{
 			stopService();
 			frame.dispose();
-			if ( ortho_views )
-			{
-				xzimp.close();
-				yzimp.close();
-			}
+			closeOrthoViews();
+			// Split imp image and get the labels only
+			
+			ImagePlus labels = new ImagePlus( "Labels", new ChannelSplitter().getChannel(imp, 2) );
+			labels.show();
+			imp.close();
+			
 		});
 		
 		JLabel drawmsg = new JLabel( "Draw ROI on the image or XZ or YZ views" );
