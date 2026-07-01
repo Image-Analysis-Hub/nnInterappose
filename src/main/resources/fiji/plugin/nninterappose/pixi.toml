@@ -5,13 +5,18 @@ authors = [
 channels = ["conda-forge"]
 name = "nninteractiveEnv"
 platforms = ["osx-arm64", "win-64", "linux-64", "osx-64"]
-version = "0.0.0"
+version = "0.0.1"
 
 [tasks]
 test = { cmd = "python interactive.py" }
 
 [dependencies]
 python = ">=3.9,<3.13"
+packaging = ">=26.2,<27"
+wheel = "*"
+hatchling = "*"
+cmake = "*"
+llvmlite = "*"
 
 [pypi-dependencies]
 appose = ">=0.10.1, <=0.12"

@@ -120,6 +120,9 @@ public class Interact implements PlugIn
 	private ImagePlus imp = null; // img on which we are working
 	private ImagePlus xzimp = null; // XZ view of imp
 	private ImagePlus yzimp = null; // YZ view of imp
+	private boolean ortho_views = false; // activate/desactivate ortho views
+	
+	private TaskListener listener; // listener to message
 	
 	private CompositeImage merged = null; // Results image
 	private int nlabels = 0; // current number of labels created
@@ -145,8 +148,13 @@ public class Interact implements PlugIn
 		{
 			stopService();
 			frame.dispose();
-			xzimp.close();
-			yzimp.close();
+			closeOrthoViews();
+			// Split imp image and get the labels only
+			
+			ImagePlus labels = new ImagePlus( "Labels", new ChannelSplitter().getChannel(imp, 1) );
+			labels.show();
+			imp.close();
+			
 		});
 		
 		JLabel drawmsg = new JLabel( "Draw ROI on the image or XZ or YZ views" );
@@ -216,6 +224,27 @@ public class Interact implements PlugIn
                   }
               }
         });
+        
+        // Open/close the orthogonal views
+        JCheckBox checkOrthoViews = new JCheckBox( "Show orthogonal views" );
+        checkOrthoViews.setToolTipText( "Add XZ and YZ views of the stack to allow annotations in these views too." );
+        checkOrthoViews.setSelected(false);
+        checkOrthoViews.addItemListener(new ItemListener() 
+        {
+        	  @Override
+              public void itemStateChanged(ItemEvent e) 
+              {
+                  if (e.getStateChange() == ItemEvent.SELECTED) 
+                  {
+                	  openOrthoViews();
+                  }
+                  else if (e.getStateChange() == ItemEvent.DESELECTED)
+                  {
+                	 closeOrthoViews();
+                  }
+              }
+        });
+        
           
         // send roi to nn
 		JButton btnSendRoi = new JButton("Segment from ROIs (or press '0')");
@@ -238,12 +267,13 @@ public class Interact implements PlugIn
 		gbc.gridwidth = 1;
 		frame.add( btnStop );
 		gbc.gridx = 1;
-		frame.add( Box.createGlue(), gbc);
-		gbc.gridx = 2;
-		frame.add( Box.createGlue(), gbc);
+		frame.add(  checkOrthoViews, gbc );
+		//frame.add( Box.createGlue(), gbc);
+		//gbc.gridx = 2;
+		//frame.add( Box.createGlue(), gbc);
 		gbc.gridx = 0;
 		gbc.gridy = 1;
-		gbc.gridwidth = 3;
+		gbc.gridwidth = 2;
 		frame.add( drawmsg, gbc );
 		gbc.gridx = 0;
 		gbc.gridy = 2;
@@ -251,19 +281,21 @@ public class Interact implements PlugIn
 		frame.add( btnAddPos, gbc );
 		gbc.gridx = 1;
 		frame.add( btnAddNeg,gbc );
-		gbc.gridx = 2;
-		frame.add( Box.createGlue(),gbc);
+		//gbc.gridx = 2;
+		//frame.add( Box.createGlue(),gbc);
 		gbc.gridy = 3;
 		gbc.gridx = 0;
 		frame.add( mode_choice,gbc );
 		gbc.gridx = 1;
 		frame.add( checkRemoveRoi, gbc);
-		gbc.gridx = 2;
+		
+		gbc.gridy = 4;
+		gbc.gridx = 1;
 		frame.add( btnSendRoi,gbc );
 		//frame.add( Box.createGlue(),gbc);
 		gbc.gridx = 0;
-		gbc.gridy = 4;
-		gbc.gridwidth = 3;          // span 3 columns
+		gbc.gridy = 5;
+		gbc.gridwidth = 2;          // span 3 columns
 		gbc.fill = GridBagConstraints.HORIZONTAL; // stretch horizontally
 		frame.add( removeLab, gbc);
 	
@@ -419,6 +451,39 @@ public class Interact implements PlugIn
 			IJ.log( "Close python" );
 			nnservice.close();
 		}
+	}
+	
+	/** Open orthogonal views */
+	public void openOrthoViews()
+	{
+		ortho_views = true;
+		Slicer slicer = new Slicer();
+		xzimp = slicer.reslice(imp); 
+		xzimp.setTitle("XZ View");
+		xzimp.resetDisplayRange();
+		xzimp.show();
+		
+		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
+		yzimp = IJ.getImage();
+		yzimp.setTitle("YZ View");
+		yzimp.resetDisplayRange();
+		yzimp.show();
+		
+		// Activates the shortcuts and the two views
+		addShortcuts( xzimp, "xz");
+		addShortcuts( yzimp, "yz");
+	}
+	
+	
+	/** Close orthogonal views if they are opened */
+	public void closeOrthoViews()
+	{
+		if ( ortho_views )
+		{
+			xzimp.close();
+			yzimp.close();
+		}
+		ortho_views = false;
 	}
 	
 	/**
@@ -624,19 +689,9 @@ public class Interact implements PlugIn
 		
 		transferCalibration( imp, merged );
 		
-		Slicer slicer = new Slicer();
-		xzimp = slicer.reslice(imp); 
-		xzimp.setTitle("XZ View");
-		xzimp.resetDisplayRange();
-		xzimp.show();
 		
-		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
-		yzimp = IJ.getImage();
-		yzimp.setTitle("YZ View");
-		yzimp.resetDisplayRange();
-		yzimp.show();
-	
 	}
+	
 	
 	/**
 	 * Get the outputs in the shared memory and add it to the labels image
@@ -848,17 +903,17 @@ public class Interact implements PlugIn
 		final Map< String, Object > inputs = new HashMap<>();
 		inputs.put( "image", NDArrays.asNDArray( img ) );
 		
-		IJ.log( "Downloading/Installing the environment if necessary..." );
+		listener = new TaskListener();
+		//IJ.log( "Downloading/Installing the environment if necessary..." );
 		String envName = "default"; // can be modified if need several types of environment
 		
 		Environment env = null;
 		try {
 			env = Appose // the builder
 					.pixi( this.getClass().getResource("pixi.toml") ) // we chose pixi as the environment manager
-					.subscribeProgress( this::showProgress ) // report progress visually
-					.subscribeOutput( this::showProgress ) // report output visually
-					.subscribeError( IJ::log ) // log problems
-			        .environment( envName )  // choose env based on OS (to get cuda or not)
+					.subscribeProgress( listener.progressListener() ) // report progress visually
+					.subscribeOutput( listener.outputListener() ) // report output visually
+					.subscribeError( listener.errorListener() ) // log problems
 					.build();
 		} 
 		catch (BuildException e) 
@@ -873,9 +928,10 @@ public class Interact implements PlugIn
 		 * Using this environment, we create a service that will run the Python
 		 * script.
 		 */
-		nnservice = env.python();
+		
 		try
 		{
+			nnservice = env.activate(envName).python();
 			// Import all that depends on numpy for Windows
 			nnservice.init("import numpy as np\n"
 					+ "import torch\n"
@@ -890,25 +946,19 @@ public class Interact implements PlugIn
 			Task task = nnservice.task( script, inputs );
 			
 			// Start the script, and return to Java immediately.
-			IJ.log( "Starting nnInteractive task..." );
+			listener.message( "Starting nnInteractive task..." );
 			 // Listen for events from Python
-			task.listen( e -> {
-				if (e.message != null) 
-				{ 
-					IJ.log( e.message );
-				}
-
-			} );
+			task.listen(  listener.taskListener());
 		    		    
 		    task.start();
 			task.waitFor();
-			
 			
 			IJ.showStatus( "Annotation" );
 			
 			// Verify that it worked.
 			if ( task.status != TaskStatus.COMPLETE )
 				throw new RuntimeException( "Python script failed with error: " + task.error );
+			listener.message( "Initialization done." );
 		}
 		catch ( Exception e)
 		{
@@ -986,7 +1036,7 @@ private void hideProgress()
 	 * Launch the interactive process
 	 */
 	
-@Override
+	@Override
 	public void run( final String arg )
 	{
 		// get/initialize the ROIManager
@@ -1024,8 +1074,6 @@ private void hideProgress()
 		prepareResultImage();
 		// add shortcuts on the image
 		addShortcuts( merged, "xy" );
-		addShortcuts( xzimp, "xz");
-		addShortcuts( yzimp, "yz");
 		// interface
 		main_gui();
 	}
