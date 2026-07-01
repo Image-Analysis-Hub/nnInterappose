@@ -122,6 +122,8 @@ public class Interact implements PlugIn
 	private ImagePlus yzimp = null; // YZ view of imp
 	private boolean ortho_views = false; // activate/desactivate ortho views
 	
+	private TaskListener listener; // listener to message
+	
 	private CompositeImage merged = null; // Results image
 	private int nlabels = 0; // current number of labels created
 	private boolean all_for_one = true; // define one object by ROI or all for one
@@ -901,6 +903,7 @@ public class Interact implements PlugIn
 		final Map< String, Object > inputs = new HashMap<>();
 		inputs.put( "image", NDArrays.asNDArray( img ) );
 		
+		listener = new TaskListener();
 		IJ.log( "Downloading/Installing the environment if necessary..." );
 		String envName = "default"; // can be modified if need several types of environment
 		
@@ -908,10 +911,9 @@ public class Interact implements PlugIn
 		try {
 			env = Appose // the builder
 					.pixi( this.getClass().getResource("pixi.toml") ) // we chose pixi as the environment manager
-					.subscribeProgress( this::showProgress ) // report progress visually
-					.subscribeOutput( this::showProgress ) // report output visually
-					.subscribeError( IJ::log ) // log problems
-			        .environment( envName )  // choose env based on OS (to get cuda or not)
+					.subscribeProgress( listener.progressListener() ) // report progress visually
+					.subscribeOutput( listener.outputListener() ) // report output visually
+					.subscribeError( listener.errorListener() ) // log problems
 					.build();
 		} 
 		catch (BuildException e) 
@@ -926,9 +928,10 @@ public class Interact implements PlugIn
 		 * Using this environment, we create a service that will run the Python
 		 * script.
 		 */
-		nnservice = env.python();
+		
 		try
 		{
+			nnservice = env.activate(envName).python();
 			// Import all that depends on numpy for Windows
 			nnservice.init("import numpy as np\n"
 					+ "import torch\n"
@@ -943,25 +946,19 @@ public class Interact implements PlugIn
 			Task task = nnservice.task( script, inputs );
 			
 			// Start the script, and return to Java immediately.
-			IJ.log( "Starting nnInteractive task..." );
+			listener.message( "Starting nnInteractive task..." );
 			 // Listen for events from Python
-			task.listen( e -> {
-				if (e.message != null) 
-				{ 
-					IJ.log( e.message );
-				}
-
-			} );
+			task.listen(  listener.taskListener());
 		    		    
 		    task.start();
 			task.waitFor();
-			
 			
 			IJ.showStatus( "Annotation" );
 			
 			// Verify that it worked.
 			if ( task.status != TaskStatus.COMPLETE )
 				throw new RuntimeException( "Python script failed with error: " + task.error );
+			listener.message( "Initialization done." );
 		}
 		catch ( Exception e)
 		{
