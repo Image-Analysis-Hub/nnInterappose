@@ -151,7 +151,7 @@ public class Interact implements PlugIn
 			closeOrthoViews();
 			// Split imp image and get the labels only
 			
-			ImagePlus labels = new ImagePlus( "Labels", new ChannelSplitter().getChannel(imp, 2) );
+			ImagePlus labels = new ImagePlus( "Labels", new ChannelSplitter().getChannel(imp, 1) );
 			labels.show();
 			imp.close();
 			
@@ -904,7 +904,7 @@ public class Interact implements PlugIn
 		inputs.put( "image", NDArrays.asNDArray( img ) );
 		
 		listener = new TaskListener();
-		IJ.log( "Downloading/Installing the environment if necessary..." );
+		//IJ.log( "Downloading/Installing the environment if necessary..." );
 		String envName = "default"; // can be modified if need several types of environment
 		
 		Environment env = null;
