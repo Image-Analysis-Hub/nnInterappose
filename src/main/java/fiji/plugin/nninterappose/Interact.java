@@ -617,12 +617,7 @@ public class Interact implements PlugIn
 
 				// Go launch task of segmentation with the ROIs as seeds
 				Task task = nnservice.task( run_script, nninputs );
-				task.listen( e -> {
-					if (e.message != null) 
-					{ 
-						IJ.log( e.message );
-					}
-				});
+				task.listen(listener.taskListener());
 				task.waitFor();
 				if ( task.status != TaskStatus.COMPLETE )
 					throw new RuntimeException( "Python script failed with error: " + task.error );
@@ -907,6 +902,7 @@ public class Interact implements PlugIn
 		//IJ.log( "Downloading/Installing the environment if necessary..." );
 		String envName = "default"; // can be modified if need several types of environment
 		
+		listener.message("Installing environment with pixi if necessary");
 		Environment env = null;
 		try {
 			env = Appose // the builder
@@ -931,6 +927,7 @@ public class Interact implements PlugIn
 		
 		try
 		{
+			listener.message("Initializing the python environment");
 			nnservice = env.activate(envName).python();
 			// Import all that depends on numpy for Windows
 			nnservice.init("import numpy as np\n"

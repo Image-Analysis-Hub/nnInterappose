@@ -86,16 +86,11 @@ def set_image_nn( session, img ):
     return session, shape
 
 
-appose_mode = 'task' in globals()
-if not appose_mode:
-   	from appose.python_worker import Task
-   	task = Task()
 
 task.update( message=f"Starting nnInteractive session" )
 session = initialize_nn()
 
-if appose_mode:
-    img = image.ndarray()
+img = image.ndarray()
 
 task.update( message=f"Set image in nnInteractive" )
 session, imgshape = set_image_nn( session, img )

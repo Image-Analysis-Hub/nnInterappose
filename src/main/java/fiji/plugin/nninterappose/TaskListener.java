@@ -47,179 +47,192 @@ import javax.swing.WindowConstants;
 import org.apposed.appose.Builder.ProgressConsumer;
 import org.apposed.appose.TaskEvent;
 
+import java.util.function.Consumer;
+
+import org.apposed.appose.Builder.ProgressConsumer;
+import org.apposed.appose.TaskEvent;
 import ij.IJ;
 
-public class TaskListener 
+
+
+
+/**
+ * Interface for listeners that want to be notified about the progress and
+ * results of Appose tasks. This can be used to update the user interface, log
+ * progress, or perform other actions based on the Appose task's lifecycle
+ * events.
+ */
+
+public class TaskListener
 {
 
-		private volatile JDialog progressDialog;
+	private volatile JDialog progressDialog;
 
-		private volatile JProgressBar progressBar;
+	private volatile JProgressBar progressBar;
 
-		private volatile ScheduledFuture< ? > delayedShowTask;
+	private volatile ScheduledFuture< ? > delayedShowTask;
 
-		private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool( 1 );
-		
-		private boolean DEBUG = false;  // active/deactivate debug prints to console
-
-		/*
-		 * Normal Appose messages -> IJ toolbar.
-		 */
-
-		public Consumer< TaskEvent > taskListener()
-		{
-			return e -> {
-				closeProgressDialog();
-				if ( DEBUG ) System.out.println("task "+e.message);
-				if ( e.message != null && !e.message.trim().isEmpty() )
-					IJ.showStatus( e.responseType + ": " + e.message );
-				if ( e.current >= 0 && e.maximum > 0 )
-					IJ.showProgress( ( int ) e.current, ( int ) e.maximum );
-			};
-		}
-		
-
-		public void message( final String msg )
-		{
-			//System.out.println("msg "+msg);
-			IJ.showStatus( msg );	
-		}
-
-		/*
-		 * Installation messages -> Custom progres dialog.
-		 */
-
-
-		public Consumer< String > outputListener()
-		{
-			return str -> log( str );
-		}
-
+	private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool( 1 );
 	
-		public Consumer< String > errorListener()
-		{
-			return str -> {
-				/*
-				 * We have an issue here: pixi always return an error message that
-				 * says "✔ The cp4-cpu environment has been installed." when the
-				 * environment is ready, even if it was already installed. So we
-				 * need to filter out this message to avoid showing an error dialog.
-				 */
-				if ( str != null && (str.contains( "environment has been installed." ) ) )
-				{
-					final String envName = str.substring( str.indexOf( "The" ) + 3, str.indexOf( "environment" ) );
-					IJ.showStatus( "Python environment " + envName + "is ready." );
-					if ( DEBUG ) System.out.println( "DEBUG "+str );
-				}
-				else 
-				{
-					if ( str != null && (str.contains( "INFO" )) || (str.contains( "DEBUG" )) )
-					{	
-						log( str );
-					}
-					else {
-						// Actual error.
-						log( "ERROR: " + str );
-					}
-				}
-			};
-		}
+	private boolean DEBUG = false;  // active/deactivate debug prints to console
 
-		
-		public ProgressConsumer progressListener()
-		{
-			return ( msg, cur, max ) -> log( msg, cur, max );
-		}
-		
-		/** Close progress dialog bar if it exists */
-		public void closeProgressDialog()
-		{
+	/*
+	 * Normal Appose messages -> IJ toolbar.
+	 */
+
+	public Consumer< TaskEvent > taskListener()
+	{
+		return e -> {
+			closeProgressDialog();
+			if ( DEBUG ) System.out.println("task "+e.message);
+			if ( e.message != null && !e.message.trim().isEmpty() )
+				IJ.showStatus( e.responseType + ": " + e.message );
+			if ( e.current >= 0 && e.maximum > 0 )
+				IJ.showProgress( ( int ) e.current, ( int ) e.maximum );
+		};
+	}
+	
+	public void message( final String msg )
+	{
+		//System.out.println("msg "+msg);
+		IJ.showStatus( msg );	
+	}
+
+	/*
+	 * Installation messages -> Custom progres dialog.
+	 */
+
+	public Consumer< String > outputListener()
+	{
+		return str -> log( str );
+	}
+
+	public Consumer< String > errorListener()
+	{
+		return str -> {
+			/*
+			 * We have an issue here: pixi always return an error message that
+			 * says "✔ The cp4-cpu environment has been installed." when the
+			 * environment is ready, even if it was already installed. So we
+			 * need to filter out this message to avoid showing an error dialog.
+			 */
+			if ( str != null && (str.contains( "environment has been installed." ) ) )
+			{
+				final int envIdx = str.indexOf( "environment has been installed." );
+				final int theIdx = str.lastIndexOf( "The", envIdx );
+				final String envName = ( theIdx >= 0 && theIdx + 3 <= envIdx )
+						? str.substring( theIdx + 3, envIdx ).trim()
+						: "";
+				IJ.showStatus( "Python environment " + envName + " is ready." );
+				if ( DEBUG ) System.out.println( "DEBUG "+str );
+			}
+			else 
+			{
+				if ( str != null && (str.contains( "INFO" )) || (str.contains( "DEBUG" )) )
+				{	
+					log( str );
+				}
+				else {
+					// Actual error.
+					log( "ERROR: " + str );
+				}
+			}
+		};
+	}
+
+	public ProgressConsumer progressListener()
+	{
+		return ( msg, cur, max ) -> log( msg, cur, max );
+	}
+	
+	/** Close progress dialog bar if it exists */
+	public void closeProgressDialog()
+	{
+		if ( progressDialog != null )
+			progressDialog.dispose();
+		progressDialog = null;
+	}
+
+	public void close()
+	{
+		EventQueue.invokeLater( () -> {
+			// Cancel the delayed show if it hasn't run yet
+			if ( delayedShowTask != null )
+			{
+				delayedShowTask.cancel( false );
+				delayedShowTask = null;
+			}
+
 			if ( progressDialog != null )
 				progressDialog.dispose();
 			progressDialog = null;
-		}
+		} );
+	}
 
-		public void close()
-		{
-			EventQueue.invokeLater( () -> {
-				// Cancel the delayed show if it hasn't run yet
-				if ( delayedShowTask != null )
+	private void log( final String msg, final Long cur, final Long max )
+	{
+		//System.out.println( "Received msg: " + msg + " cur: " + cur + " max: " + max );
+		EventQueue.invokeLater( () -> {
+			if ( progressDialog == null )
+			{
+				// Schedule the dialog to appear after 1 second
+				if ( delayedShowTask == null )
 				{
-					delayedShowTask.cancel( false );
-					delayedShowTask = null;
+					delayedShowTask = scheduler.schedule( () -> {
+						EventQueue.invokeLater( () -> {
+							if ( progressDialog == null  )
+								createAndShowDialog();
+						} );
+					}, 1, TimeUnit.SECONDS );
 				}
+				return; // Don't update yet, dialog not visible
+			}
+			
+			// Dont show DEBUG messages, or to the console if DEBUG is on
+			if ( msg.startsWith( "DEBUG " ))
+			{
+				if ( DEBUG ) System.out.println( msg );
+			} else {
+				// Update existing dialog
+				updateProgressBar( msg, cur, max );
+			}
+		} );
+	}
 
-				if ( progressDialog != null )
-					progressDialog.dispose();
-				progressDialog = null;
-			} );
-		}
+	private void log( final String msg )
+	{
+		log( msg, null, null );
+	}
 
-		private void log( final String msg, final Long cur, final Long max )
-		{
-			//System.out.println( "Received msg: " + msg + " cur: " + cur + " max: " + max );
-			EventQueue.invokeLater( () -> {
-				if ( progressDialog == null )
-				{
-					// Schedule the dialog to appear after 1 second
-					if ( delayedShowTask == null )
-					{
-						delayedShowTask = scheduler.schedule( () -> {
-							EventQueue.invokeLater( () -> {
-								if ( progressDialog == null  )
-									createAndShowDialog();
-							} );
-						}, 1, TimeUnit.SECONDS );
-					}
-					return; // Don't update yet, dialog not visible
-				}
-				
-				// Dont show DEBUG messages, or to the console if DEBUG is on
-				if ( msg.startsWith( "DEBUG " ))
-				{
-					if ( DEBUG ) System.out.println( msg );
-				} else {
-					// Update existing dialog
-					updateProgressBar( msg, cur, max );
-				}
-			} );
-		}
+	private void createAndShowDialog()
+	{
+		final Window owner = IJ.getInstance();
+		progressDialog = new JDialog( owner, "Fiji ♥ Appose" );
+		progressDialog.setDefaultCloseOperation( WindowConstants.DO_NOTHING_ON_CLOSE );
+		progressBar = new JProgressBar();
+		progressDialog.getContentPane().add( progressBar );
+		progressBar.setFont( new Font( "Courier", Font.PLAIN, 14 ) );
+		progressBar.setString(
+				"--------------------==================== " +
+						"Building Python environment " +
+						"====================--------------------" );
+		progressBar.setStringPainted( true );
+		progressBar.setIndeterminate( true );
+		progressDialog.pack();
+		progressDialog.setLocationRelativeTo( owner );
+		progressDialog.setVisible( true );
+		delayedShowTask = null;
+	}
 
-		private void log( final String msg )
-		{
-			log( msg, null, null );
-		}
-
-		private void createAndShowDialog()
-		{
-			final Window owner = IJ.getInstance();
-			progressDialog = new JDialog( owner, "Fiji ♥ Appose" );
-			progressDialog.setDefaultCloseOperation( WindowConstants.DO_NOTHING_ON_CLOSE );
-			progressBar = new JProgressBar();
-			progressDialog.getContentPane().add( progressBar );
-			progressBar.setFont( new Font( "Courier", Font.PLAIN, 14 ) );
-			progressBar.setString(
-					"--------------------==================== " +
-							"Building Python environment " +
-							"====================--------------------" );
-			progressBar.setStringPainted( true );
-			progressBar.setIndeterminate( true );
-			progressDialog.pack();
-			progressDialog.setLocationRelativeTo( owner );
-			progressDialog.setVisible( true );
-			delayedShowTask = null;
-		}
-
-		private void updateProgressBar( final String msg, final Long cur, final Long max )
-		{
-			if ( msg != null && !msg.trim().isEmpty() )
-				progressBar.setString( "Building Python environment: " + msg.trim() );
-			if ( cur != null || max != null )
-				progressBar.setIndeterminate( false );
-			if ( max != null )
-				progressBar.setMaximum( max.intValue() );
-			if ( cur != null )
-				progressBar.setValue( cur.intValue() );
-		}
-
+	private void updateProgressBar( final String msg, final Long cur, final Long max )
+	{
+		if ( msg != null && !msg.trim().isEmpty() )
+			progressBar.setString( "Building Python environment: " + msg.trim() );
+		if ( cur != null || max != null )
+			progressBar.setIndeterminate( false );
+		if ( max != null )
+			progressBar.setMaximum( max.intValue() );
+		if ( cur != null )
+			progressBar.setValue( cur.intValue() );
+	}
 }
