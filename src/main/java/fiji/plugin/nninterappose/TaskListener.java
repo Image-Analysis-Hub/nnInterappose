@@ -76,10 +76,11 @@ public class TaskListener
 	
 	private boolean DEBUG = false;  // active/deactivate debug prints to console
 
-	/*
-	 * Normal Appose messages -> IJ toolbar.
-	 */
-
+	public void initProgressDialog()
+	{
+		progressDialog = null;
+	}
+	
 	public Consumer< TaskEvent > taskListener()
 	{
 		return e -> {
@@ -90,6 +91,11 @@ public class TaskListener
 			if ( e.current >= 0 && e.maximum > 0 )
 				IJ.showProgress( ( int ) e.current, ( int ) e.maximum );
 		};
+	}
+	
+	public void setDebug( final boolean debug_mode)
+	{
+		DEBUG = debug_mode;
 	}
 	
 	public void message( final String msg )
@@ -124,7 +130,7 @@ public class TaskListener
 						? str.substring( theIdx + 3, envIdx ).trim()
 						: "";
 				IJ.showStatus( "Python environment " + envName + " is ready." );
-				if ( DEBUG ) System.out.println( "DEBUG "+str );
+				if ( DEBUG ) System.out.println( "Env installed "+str );
 			}
 			else 
 			{
@@ -169,12 +175,16 @@ public class TaskListener
 		} );
 	}
 
-	private void log( final String msg, final Long cur, final Long max )
+	public void log( final String msg, final Long cur, final Long max )
 	{
-		//System.out.println( "Received msg: " + msg + " cur: " + cur + " max: " + max );
+		//IJ.showStatus(msg);
+		if (DEBUG)
+		{
+			System.out.println( "Received msg: " + msg + " cur: " + cur + " max: " + max );
+		}
 		EventQueue.invokeLater( () -> {
-			if ( progressDialog == null )
-			{
+		if ( progressDialog == null )
+		{
 				// Schedule the dialog to appear after 1 second
 				if ( delayedShowTask == null )
 				{
@@ -199,7 +209,7 @@ public class TaskListener
 		} );
 	}
 
-	private void log( final String msg )
+	public void log( final String msg )
 	{
 		log( msg, null, null );
 	}
@@ -208,7 +218,7 @@ public class TaskListener
 	{
 		final Window owner = IJ.getInstance();
 		progressDialog = new JDialog( owner, "Fiji ♥ Appose" );
-		progressDialog.setDefaultCloseOperation( WindowConstants.DO_NOTHING_ON_CLOSE );
+		progressDialog.setDefaultCloseOperation( WindowConstants.HIDE_ON_CLOSE);
 		progressBar = new JProgressBar();
 		progressDialog.getContentPane().add( progressBar );
 		progressBar.setFont( new Font( "Courier", Font.PLAIN, 14 ) );
