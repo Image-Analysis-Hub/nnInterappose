@@ -164,9 +164,10 @@ public class Interact implements PlugIn
 			closeOrthoViews();
 			// Split imp image and get the labels only
 			
-			ImagePlus labels = new ImagePlus( "Labels", new ChannelSplitter().getChannel(imp, 1) );
+			new ChannelSplitter();
+			ImagePlus labels = new ImagePlus( "Labels", ChannelSplitter.getChannel(merged, 2) );
 			labels.show();
-			imp.close();
+			merged.close();
 			
 		});
 		
