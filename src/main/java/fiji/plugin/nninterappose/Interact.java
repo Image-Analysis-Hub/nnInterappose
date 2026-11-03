@@ -37,6 +37,7 @@ package fiji.plugin.nninterappose;
 
 import java.awt.Color;
 import java.awt.EventQueue;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -71,6 +72,7 @@ import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.WindowConstants;
 
@@ -80,6 +82,7 @@ import org.apposed.appose.BuildException;
 import org.apposed.appose.Environment;
 import org.apposed.appose.NDArray;
 import org.apposed.appose.Service;
+import org.apposed.appose.TaskException;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.TaskStatus;
 
@@ -131,7 +134,8 @@ public class Interact implements PlugIn
 	
 	private Service nnservice = null; // running python service
 	final String run_script = getScript( this.getClass().getResource("run_session.py" ) );
-	
+	private String cuda_env = "cu126"; // default cuda version
+	private boolean debug_mode = false; // print more messages
 	
 	/**
 	 * Create the parameter interface
@@ -141,6 +145,15 @@ public class Interact implements PlugIn
 		JFrame frame = new JFrame("nnInter-Appose");
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setSize(800, 250);
+		
+		// Initialize the nnInteractive python task
+		JButton btnInit = new JButton("Initialize nnInteractive");
+		btnInit.addActionListener( e -> 
+		{
+			initialize_nn();
+		});
+		btnInit.setBackground( new Color(205, 229, 252) );
+		
 		
 		// Stop the nnInteractive python task
 		JButton btnStop = new JButton("QUIT");
@@ -157,25 +170,40 @@ public class Interact implements PlugIn
 			
 		});
 		
-		JLabel drawmsg = new JLabel( "Draw ROI on the image or XZ or YZ views" );
+		// Debug mode on/off
+		JCheckBox checkDebug = new JCheckBox( "Show debug messages" );
+        checkDebug.setToolTipText( "Print debug messages in the console." );
+        checkDebug.setSelected(false);
+        checkDebug.addItemListener(new ItemListener() 
+        {
+        	  @Override
+              public void itemStateChanged(ItemEvent e) 
+              {
+                  if (e.getStateChange() == ItemEvent.SELECTED) 
+                  {
+                	  debug_mode = true;
+                  }
+                  else if (e.getStateChange() == ItemEvent.DESELECTED)
+                  {
+                	  debug_mode = false;
+                  }
+              }
+        });
+        
 		
+		JLabel section_python = new JLabel( "nnInteractive setup" );
+		section_python.setForeground(new Color(180,180,180));
+		section_python.setFont(section_python.getFont().deriveFont(14f));
 		
-		// Add positive/negative ROIs
-		JLabel btnAddPos = new JLabel( "Press '1' to add positive ROI" );
-		/**btnAddPos.addActionListener( e -> 
-		{
-			addRoi( true, "xy" );
-		});
-		btnAddPos.setToolTipText("Add current selection in the image as a positive seed for nnInteractive");
-		*/
+		JLabel sections = new JLabel("---------------------------------------------");
+		sections.setForeground(new Color(200,200,200));
+		sections.setFont(sections.getFont().deriveFont(12f));
 		
-		JLabel btnAddNeg = new JLabel( "Press '2' to add negative ROI" );
-		/**btnAddNeg.addActionListener( e -> 
-		{
-			addRoi( false, "xy" );
-		});
-		btnAddNeg.setToolTipText("Add current selection in the image as a negative seed for nnInteractive");
-		*/
+		JLabel drawmsg = new JLabel( "<html>Draw ROI on the image or XZ or YZ views <br>"
+				+ " Press <kbd>1</kbd> to add positive ROI <br>"
+				+ " Press <kbd>2</kbd> to add negative ROI <br>"
+				+ "<kbd>Ctrl+Left click</kbd> on segmented object to remove it </html>" );
+		
 		// Choose mode: one ROI to create one object or multiple ROIs to refine one object
 		JComboBox<String> mode_choice = new JComboBox<String>();
         mode_choice.addItem("All ROIs define one object");
@@ -255,50 +283,97 @@ public class Interact implements PlugIn
 		
 		JLabel removeLab = new JLabel( "Ctrl+Left click on a segmented object to remove it" );
 		removeLab.setToolTipText( "To remove a wrong segmentation, control+left click on the object" );
-				
+		
+		// Choose cuda: for pytorch compatibility, which cuda to download
+		JLabel cudaLab = new JLabel( "Cuda version:" );
+		JComboBox<String> cuda_choice = new JComboBox<String>();
+		cuda_choice.addItem("cu126");
+		cuda_choice.addItem("cu130");
+		cuda_choice.addItem("cpu");
+        cuda_choice.addItemListener(new ItemListener() 
+        {
+            @Override
+            public void itemStateChanged(ItemEvent e) 
+            {
+                if (e.getStateChange() == ItemEvent.SELECTED) 
+                {
+                    cuda_env = (String) e.getItem();
+                }
+            }
+        });
+        cuda_choice.setToolTipText( "Choose which version of CUDA is compatible with your GPU card" );
+        		
 		frame.setLayout( new GridBagLayout() );
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.ipadx = 15;
 		gbc.ipady = 15;
 		gbc.insets = new Insets( 2, 2, 2, 2 ); // space between components
-				
+		
+		int row = 0;
+		gbc.gridy = row;
 		gbc.gridx = 0;
-		gbc.gridy = 0;
-		gbc.gridwidth = 1;
-		frame.add( btnStop );
+		frame.add(section_python, gbc);
+		
 		gbc.gridx = 1;
-		frame.add(  checkOrthoViews, gbc );
-		//frame.add( Box.createGlue(), gbc);
-		//gbc.gridx = 2;
-		//frame.add( Box.createGlue(), gbc);
+		frame.add(checkDebug, gbc);
+		
+		row = row + 1;
+		// Choose cuda and initialize
+		JPanel cudas = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+		cudas.add(cudaLab);
+		cudas.add(cuda_choice);
+
+		gbc.gridy = row;
 		gbc.gridx = 0;
-		gbc.gridy = 1;
+		frame.add(cudas, gbc);
+		
+		gbc.gridy = row;
+		gbc.gridx = 1;
+		gbc.gridwidth = 1;
+		frame.add(btnInit, gbc);
+		
+		row = row + 1;
 		gbc.gridwidth = 2;
+		gbc.gridx = 0;
+		gbc.gridy = row;
+		frame.add(sections, gbc);
+		
+		row = row + 1;
+		// Drawing options
+		gbc.gridx = 0;
+		gbc.gridy = row;
+		gbc.gridwidth = 2;
+		gbc.gridheight = 3;
 		frame.add( drawmsg, gbc );
+		
+		row = row + 3;
+		gbc.gridy = row;
 		gbc.gridx = 0;
-		gbc.gridy = 2;
+		gbc.gridheight = 1;
 		gbc.gridwidth = 1;
-		frame.add( btnAddPos, gbc );
-		gbc.gridx = 1;
-		frame.add( btnAddNeg,gbc );
-		//gbc.gridx = 2;
-		//frame.add( Box.createGlue(),gbc);
-		gbc.gridy = 3;
+		frame.add(  checkOrthoViews, gbc );
+		
+		row = row + 2;
 		gbc.gridx = 0;
-		frame.add( mode_choice,gbc );
+		gbc.gridy = row;
+		frame.add( mode_choice, gbc );
 		gbc.gridx = 1;
 		frame.add( checkRemoveRoi, gbc);
 		
-		gbc.gridy = 4;
-		gbc.gridx = 1;
-		frame.add( btnSendRoi,gbc );
-		//frame.add( Box.createGlue(),gbc);
+		row = row + 1;
+		gbc.gridy = row;
 		gbc.gridx = 0;
-		gbc.gridy = 5;
-		gbc.gridwidth = 2;          // span 3 columns
-		gbc.fill = GridBagConstraints.HORIZONTAL; // stretch horizontally
-		frame.add( removeLab, gbc);
+		frame.add( btnSendRoi,gbc );
+		//row = row + 1;
+		gbc.gridx = 1;
+		gbc.gridy = row;
+		gbc.gridwidth = 1;
+		frame.add( btnStop, gbc );
 	
+		//frame.add( Box.createGlue(), gbc);
+		//gbc.gridx = 2;
+		//frame.add( Box.createGlue(), gbc);
+		
 		frame.setLocationRelativeTo(null);
 		frame.pack();
 		frame.setVisible(true);
@@ -505,8 +580,9 @@ public class Interact implements PlugIn
 	{
 		if ( nnservice == null )
 		{
-			IJ.error("No currently active session. Wait for initialization to be done or relaunch the plugin");
-			return;
+			IJ.log("No currently active session. nnInteractive will be initialized now, wait for it to finish...");
+			initialize_nn();
+			IJ.log("Environment and nnInteractive ready. Now doing the requested segmentation...");
 		}
 		
 		// Check if has been initialised else do it now
@@ -884,12 +960,32 @@ public class Interact implements PlugIn
 		return raw;
 	}
 	
+	public void initialize_nn()
+	{
+		IJ.showStatus("Initializing python environment and nnInteractive...");
+		listener = new TaskListener();
+		listener.setDebug(debug_mode);
+		
+		if (nnservice == null)	
+		{
+			// Install/initialize the python env with nnInteractive
+			try {
+				initialize(listener);
+			}
+			catch ( final Exception e )
+			{
+				IJ.handleException( e );
+			}	
+			
+		}				
+	}
+			
 	/**
 	 * Prepare the python environment and initialize nnInteractive to the active image
 	 */
-	public < T extends RealType< T > & NativeType< T > > void initialize()
+	public < T extends RealType< T > & NativeType< T > > void initialize(TaskListener listener) throws IOException, BuildException, InterruptedException, TaskException
 	{
-		
+	
 		final ImgPlus<T> img = rawWraps( imp );
 		final String script = getScript( this.getClass().getResource("init_session.py" ) );
 		/*
@@ -898,39 +994,28 @@ public class Interact implements PlugIn
 		final Map< String, Object > inputs = new HashMap<>();
 		inputs.put( "image", NDArrays.asNDArray( img ) );
 		
-		listener = new TaskListener();
 		//IJ.log( "Downloading/Installing the environment if necessary..." );
-		String envName = "default"; // can be modified if need several types of environment
+		String envName = cuda_env; // can be modified if need several types of environment
+		// Python env. specifications.
+		String nnEnv = pixiEnv();
 		
-		listener.message("Installing environment with pixi if necessary");
-		Environment env = null;
-		try {
-			env = Appose // the builder
-					.pixi( this.getClass().getResource("pixi.toml") ) // we chose pixi as the environment manager
+		//listener.message("Installing environment with pixi if necessary");
+		final Environment env = Appose // the builder
+					.pixi()
+					.content( nnEnv )
 					.subscribeProgress( listener.progressListener() ) // report progress visually
 					.subscribeOutput( listener.outputListener() ) // report output visually
 					.subscribeError( listener.errorListener() ) // log problems
 					.build();
-		} 
-		catch (BuildException e) 
-		{
-			IJ.error( "Error in creating/initializing the python environment: "+e.toString() );
-			e.printStackTrace();
-		} // create the environment
-		hideProgress();
-
 		
-		/*
-		 * Using this environment, we create a service that will run the Python
-		 * script.
-		 */
+		//listener.message("Initializing the python environment");
+		if (debug_mode) System.out.println("DEBUG: Initializing the python environment "+envName);
+			
+		final Environment activated = env.activate(envName);
+		nnservice = activated.python();
 		
-		try
-		{
-			listener.message("Initializing the python environment");
-			nnservice = env.activate(envName).python();
-			// Import all that depends on numpy for Windows
-			nnservice.init("import numpy as np\n"
+		// Import all that depends on numpy for Windows
+		nnservice.init("import numpy as np\n"
 					+ "import torch\n"
 					+ "import os\n"
 					+ "from huggingface_hub import snapshot_download\n"
@@ -938,29 +1023,21 @@ public class Interact implements PlugIn
 					+ "from skimage.measure import find_contours\n"
 					+ "from skimage.morphology import dilation, disk");
 			
-			//python.debug( msg -> show_messages( msg ) );
+		Task task = nnservice.task( script, inputs );
 			
-			Task task = nnservice.task( script, inputs );
-			
-			// Start the script, and return to Java immediately.
-			listener.message( "Starting nnInteractive task..." );
-			 // Listen for events from Python
-			task.listen(  listener.taskListener());
-		    		    
-		    task.start();
-			task.waitFor();
-			
-			IJ.showStatus( "Annotation" );
+		// Start the script, and return to Java immediately.
+		if (debug_mode) System.out.println( "DEBUG: Starting nnInteractive task..." );
+		
+		// Listen for events from Python
+		task.listen(  listener.taskListener() );  		    
+		task.start();
+		task.waitFor();
+		//IJ.showStatus( "Annotation" );
 			
 			// Verify that it worked.
 			if ( task.status != TaskStatus.COMPLETE )
 				throw new RuntimeException( "Python script failed with error: " + task.error );
-			listener.message( "Initialization done." );
-		}
-		catch ( Exception e)
-		{
-			IJ.error( "" + e );
-		}
+			listener.message( "Initialization done." );	
 	}
 	
 	/*
@@ -981,53 +1058,16 @@ public class Interact implements PlugIn
 		return script;
 	}
 	
-
-private volatile JDialog progressDialog;
-
-private volatile JProgressBar progressBar;
-
-private void showProgress( final String msg )
-{
-	showProgress( msg, null, null );
-}
-
-private void showProgress( final String msg, final Long cur, final Long max )
-{
-	EventQueue.invokeLater( () ->
+	/**
+	 * Returns the content of the pixi.toml file to build the environment return
+	 * throws IOException
+	 */
+	public static String pixiEnv() throws IOException
 	{
-		if ( progressDialog == null ) {
-			final Window owner = IJ.getInstance();
-			progressDialog = new JDialog( owner, "Fiji ♥ Appose" );
-			progressDialog.setDefaultCloseOperation( WindowConstants.DO_NOTHING_ON_CLOSE );
-			progressBar = new JProgressBar();
-			progressDialog.getContentPane().add( progressBar );
-			progressBar.setFont( new Font( "Courier", Font.PLAIN, 14 ) );
-			progressBar.setString(
-				"--------------------==================== " +
-				"Building Python environment " +
-				"====================--------------------"
-			);
-			progressBar.setStringPainted( true );
-			progressBar.setIndeterminate( true );
-			progressDialog.pack();
-			progressDialog.setLocationRelativeTo( owner );
-			progressDialog.setVisible( true );
-		}
-		if ( msg != null && !msg.trim().isEmpty() ) progressBar.setString( "Building Python environment: " + msg.trim() );
-		if ( cur != null || max != null ) progressBar.setIndeterminate( false );
-		if ( max != null ) progressBar.setMaximum( max.intValue() );
-		if ( cur != null ) progressBar.setValue( cur.intValue() );
-	} );
-}
-private void hideProgress()
-{
-	EventQueue.invokeLater( () ->
-	{
-		if ( progressDialog != null )
-			progressDialog.dispose();
-		progressDialog = null;
-	} );
-}
+		final URL pixiFile = Interact.class.getResource( "pixi.toml" );
+		final String env = IOUtils.toString( pixiFile, StandardCharsets.UTF_8 );
+		return env;
+	}
 	
 	/**
 	 * Launch the interactive process
@@ -1062,11 +1102,7 @@ private void hideProgress()
 			IJ.error("nnInteractive cannot process 3D+time stacks. Process it frame by frame");
 			return;
 		}
-		
-		
-		// Install/initialize the python env with nnInteractive
-		initialize();
-		
+
 		// Prepare the image with the results as composite
 		prepareResultImage();
 		// add shortcuts on the image
