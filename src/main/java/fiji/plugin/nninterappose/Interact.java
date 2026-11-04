@@ -50,6 +50,7 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.io.BufferedReader;
@@ -88,15 +89,20 @@ import org.apposed.appose.Service.TaskStatus;
 
 import ij.CompositeImage;
 import ij.IJ;
+import ij.ImageListener;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
+import ij.gui.Line;
+import ij.gui.Overlay;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
+import ij.gui.Toolbar;
 import ij.measure.Calibration;
 import ij.plugin.ChannelSplitter;
+import ij.plugin.Duplicator;
 import ij.plugin.Orthogonal_Views;
 import ij.plugin.PlugIn;
 import ij.plugin.RGBStackMerge;
@@ -136,6 +142,11 @@ public class Interact implements PlugIn
 	final String run_script = getScript( this.getClass().getResource("run_session.py" ) );
 	private String cuda_env = "cu126"; // default cuda version
 	private boolean debug_mode = false; // print more messages
+	
+	private int cx, cy, cz;          // shared cursor position (0-based)
+	private boolean busy = false;    // re-entrancy guard
+	private double zScaleXZ = 1, zScaleYZ = 1; // scaling for the orthogonal views
+	private ImageListener imageListener;
 	
 	/**
 	 * Create the parameter interface
@@ -533,32 +544,154 @@ public class Interact implements PlugIn
 	public void openOrthoViews()
 	{
 		ortho_views = true;
+		
+		// remember the ids before because reslice create a new window but doesnt make it active
+		Duplicator dup = new Duplicator();
+		ImagePlus dimp = dup.run(imp);
+		dimp.show();
+		IJ.run(dimp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
+
+		yzimp = IJ.getImage();
+		yzimp.setTitle("YZ View");
+	    yzimp.resetDisplayRange();
+	    yzimp.show();
+	
 		Slicer slicer = new Slicer();
 		xzimp = slicer.reslice(imp); 
 		xzimp.setTitle("XZ View");
 		xzimp.resetDisplayRange();
 		xzimp.show();
 		
-		IJ.run(imp, "Reslice [/]...", "output=0.500 start=Left rotate avoid");
-		yzimp = IJ.getImage();
-		yzimp.setTitle("YZ View");
-		yzimp.resetDisplayRange();
-		yzimp.show();
-		
 		// Activates the shortcuts and the two views
 		addShortcuts( xzimp, "xz");
-		addShortcuts( yzimp, "yz");
+		addShortcuts( yzimp, "yz"); 
+				
+		cx = imp.getWidth()/2;
+		cy = imp.getHeight()/2;
+		cz = imp.getZ() - 1;
+		
+		 // z stretch factors derived from actual sizes
+	    zScaleXZ = xzimp.getHeight() / (double) imp.getNSlices();
+	    zScaleYZ = yzimp.getWidth() / (double) imp.getNSlices();
+	    //System.out.println("Scale "+zScaleYZ);
+
+		addSyncListeners();
+		setPosition(cx, cy, cz);
 	}
 	
+	private void addSyncListeners()
+	{
+	    // ---- Clicks / drags in the windows ----
+	    attachMouse(merged.getCanvas(), 0);
+	    attachMouse(xzimp.getCanvas(), 1);
+	    attachMouse(yzimp.getCanvas(), 2);
+
+	    // ---- Slice changes (scrollbar, keys, mouse wheel) ----
+	    imageListener = new ImageListener() 
+	    {
+	        public void imageOpened(ImagePlus i) {}
+	        public void imageClosed(ImagePlus i) 
+	        {
+	            if (i == merged || i == xzimp || i == yzimp) closeOrthoViews();
+	        }
+	        public void imageUpdated(ImagePlus i) 
+	        {
+	            if (busy) return;
+	            if (i == merged)        setPosition(cx, cy, merged.getZ() - 1);
+	            else if (i == xzimp) setPosition(cx, xzimp.getCurrentSlice() - 1, cz);
+	            else if (i == yzimp) setPosition(yzimp.getCurrentSlice() - 1, cy, cz);
+	        }
+	    };
+	    ImagePlus.addImageListener(imageListener);
+	}
+
+	/** Get the position of the mouse cursor for each of the 3 image */
+	private void attachMouse(final ImageCanvas canvas, final int view)
+	{
+	    MouseAdapter ma = new MouseAdapter() {
+	        public void mousePressed(MouseEvent e)  { handle(e); }
+	        public void mouseDragged(MouseEvent e)  { handle(e); }
+
+	        private void handle(MouseEvent e) {
+	            if (IJ.spaceBarDown() || Toolbar.getToolId() != Toolbar.RECTANGLE
+	                    && Toolbar.getToolId() != Toolbar.CROSSHAIR
+	                    && Toolbar.getToolId() != Toolbar.HAND) { /* optional tool filter */ }
+	            int px = canvas.offScreenX(e.getX());
+	            int py = canvas.offScreenY(e.getY());
+	            switch (view) {
+	                case 0: setPosition(px, py, cz); break;                            
+	                case 1: setPosition(px, cy, (int)(py / zScaleXZ)); break;            
+	                case 2: setPosition(cx, py, (int)(px / zScaleYZ)); break;
+	            }
+	        }
+	    };
+	    canvas.addMouseListener(ma);
+	    canvas.addMouseMotionListener(ma);
+	}
+
+	/** Move the shared cursor and refresh all 3 windows. */
+	private void setPosition(int x, int y, int z)
+	{
+	    if (busy) return;
+	    busy = true;
+	    try {
+	        cx = Math.max(0, Math.min(merged.getWidth()  - 1, x));
+	        cy = Math.max(0, Math.min(merged.getHeight() - 1, y));
+	        cz = Math.max(0, Math.min(merged.getNSlices() - 1, z));
+
+	        if (merged.getZ()  != cz + 1) merged.setZ(cz + 1);
+	        if (xzimp.getCurrentSlice() != cy + 1) xzimp.setSlice(cy + 1);
+	        if (yzimp.getCurrentSlice() != cx + 1) yzimp.setSlice(cx + 1);
+
+	        updateCrosshairs();
+	    } finally {
+	        busy = false;
+	    }
+	}
+
+	/** Draw the lines in all 3 windows */
+	private void updateCrosshairs()
+	{
+	    // XY: vertical line at x, horizontal line at y
+	    Overlay o1 = new Overlay();
+	    o1.add(line(cx + 0.5, 0, cx + 0.5, merged.getHeight(), Color.YELLOW));
+	    o1.add(line(0, cy + 0.5, merged.getWidth(), cy + 0.5, Color.YELLOW));
+	    merged.setOverlay(o1);
+
+	    // XZ: vertical at x, horizontal at z*scale 
+	    double zz = (cz + 0.5) * zScaleXZ;
+	    Overlay o2 = new Overlay();
+	    o2.add(line(cx + 0.5, 0, cx + 0.5, xzimp.getHeight(), Color.YELLOW));
+	    o2.add(line(0, zz, xzimp.getWidth(), zz, Color.YELLOW));
+	    xzimp.setOverlay(o2);
+
+	    // YZ: vertical at z*scale, horizontal at y
+	    double zy = (cz + 0.5) * zScaleYZ;
+	    Overlay o3 = new Overlay();
+	    o3.add(line(zy, 0, zy, yzimp.getHeight(), Color.YELLOW));
+	    o3.add(line(0, cy + 0.5, yzimp.getWidth(), cy + 0.5, Color.YELLOW));
+	    yzimp.setOverlay(o3);
+	}
+
+	private Line line(double x1, double y1, double x2, double y2, Color c)
+	{
+	    Line l = new Line(x1, y1, x2, y2);
+	    l.setStrokeColor(c);
+	    return l;
+	}
 	
 	/** Close orthogonal views if they are opened */
 	public void closeOrthoViews()
 	{
+	    ImagePlus.removeImageListener(imageListener);
+
 		if ( ortho_views )
 		{
 			xzimp.close();
 			yzimp.close();
 		}
+	    imp.setOverlay(null);
+
 		ortho_views = false;
 	}
 	
@@ -712,6 +845,12 @@ public class Interact implements PlugIn
 				rm.addRoi(roi);
 		}
 		
+		// Update ortho views if it's on
+		if (ortho_views)
+		{
+			closeOrthoViews();
+			openOrthoViews();
+		}
 	}
 	
 	/**
