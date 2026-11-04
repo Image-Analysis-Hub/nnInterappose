@@ -545,7 +545,7 @@ public class Interact implements PlugIn
 	{
 		ortho_views = true;
 		
-		// remember the ids before because reslice create a new window but doesnt make it active
+		// duplicate because reslice take it over
 		Duplicator dup = new Duplicator();
 		ImagePlus dimp = dup.run(imp);
 		dimp.show();
@@ -556,6 +556,7 @@ public class Interact implements PlugIn
 	    yzimp.resetDisplayRange();
 	    yzimp.show();
 	
+	    // reslice in the other direction: reslice always do in XZ direction, no choice
 		Slicer slicer = new Slicer();
 		xzimp = slicer.reslice(imp); 
 		xzimp.setTitle("XZ View");
@@ -566,6 +567,7 @@ public class Interact implements PlugIn
 		addShortcuts( xzimp, "xz");
 		addShortcuts( yzimp, "yz"); 
 				
+		// Set position of cursor
 		cx = imp.getWidth()/2;
 		cy = imp.getHeight()/2;
 		cz = imp.getZ() - 1;
@@ -579,6 +581,7 @@ public class Interact implements PlugIn
 		setPosition(cx, cy, cz);
 	}
 	
+	/** Check if one of the 3 image is active, the cursor is changing position or the slice is changed */
 	private void addSyncListeners()
 	{
 	    // ---- Clicks / drags in the windows ----
@@ -608,17 +611,21 @@ public class Interact implements PlugIn
 	/** Get the position of the mouse cursor for each of the 3 image */
 	private void attachMouse(final ImageCanvas canvas, final int view)
 	{
-	    MouseAdapter ma = new MouseAdapter() {
+	    MouseAdapter ma = new MouseAdapter()
+	    {
 	        public void mousePressed(MouseEvent e)  { handle(e); }
 	        public void mouseDragged(MouseEvent e)  { handle(e); }
 
-	        private void handle(MouseEvent e) {
-	            if (IJ.spaceBarDown() || Toolbar.getToolId() != Toolbar.RECTANGLE
+	        private void handle(MouseEvent e) 
+	        {
+	            /**if (IJ.spaceBarDown() || Toolbar.getToolId() != Toolbar.RECTANGLE
 	                    && Toolbar.getToolId() != Toolbar.CROSSHAIR
-	                    && Toolbar.getToolId() != Toolbar.HAND) { /* optional tool filter */ }
-	            int px = canvas.offScreenX(e.getX());
-	            int py = canvas.offScreenY(e.getY());
-	            switch (view) {
+	                    && Toolbar.getToolId() != Toolbar.HAND) { return; }*/
+	            
+	            int px = canvas.offScreenX( e.getX() );
+	            int py = canvas.offScreenY( e.getY() );
+	            switch (view) 
+	            {
 	                case 0: setPosition(px, py, cz); break;                            
 	                case 1: setPosition(px, cy, (int)(py / zScaleXZ)); break;            
 	                case 2: setPosition(cx, py, (int)(px / zScaleYZ)); break;
